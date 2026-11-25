@@ -15,10 +15,35 @@ Stories are written by an AI model using **your own API key**. The default provi
 model id works), and the Anthropic API can be used directly instead. The key, your stories and your
 progress are stored only in your browser; the key is sent only to the provider you chose.
 
-## Install on Android
+## Getting started
 
-1. Open the deployed site in Chrome.
-2. Menu (⋮) → **Add to Home screen** → **Install**.
+1. **Get a key.** Create an API key at <https://openrouter.ai/keys> and add a few dollars of credit.
+   (Or use an Anthropic key from <https://platform.claude.com/settings/keys>.)
+2. **Open the app** and answer the three setup questions: your rough level, the language you want
+   translations in, and what you like to read. Paste your key. You can skip the key and try the
+   built-in sample chapter first.
+3. **Install it on Android:** in Chrome, menu (⋮) → **Add to Home screen** → **Install**. It then
+   opens like a normal app, and chapters you already have can be read offline.
+
+## How to use it
+
+- **Start a series:** tap **＋ New series**, pick a genre, optionally describe your own idea, and tap
+  **Write chapter 1**. Writing a chapter takes about a minute.
+- **Read:** try to understand from context first. Tap a word when you're stuck — you'll see its
+  meaning, dictionary form and a short grammar hint. From that panel you can also
+  **Translate sentence**, **Listen** to the sentence, or tap **I know this word** if you tapped by accident.
+  Words you looked up stay underlined.
+- **Finish a chapter:** at the end, say whether it was **Too easy**, **Just right** or **Too hard**.
+  The app shows how many words you needed and how your level moved, then writes the next chapter
+  to match.
+- **Words:** the *learning* tile on the home screen lists the words you looked up. They come back
+  in later chapters; mark any you already know.
+- **Settings (⚙):** change provider, key and model, translation language, interests, text size,
+  or move the level slider if stories are far off. **Export backup** saves all your progress to a
+  file — do this before clearing browser data or switching phones, since everything lives on the device.
+
+Tips: aim to look up only a handful of words per chapter — if you're tapping every other word,
+answer "Too hard". Be honest with the feedback buttons; they are the strongest signal the app gets.
 
 ## Develop
 
@@ -40,3 +65,7 @@ comprehensible-input sweet spot: looking up roughly 2–8 % of the distinct word
 Fewer lookups or "too easy" nudges the level up; more lookups, many translated sentences or
 "too hard" nudges it down (`src/adapt.ts`). The level, your still-learning words and your last
 feedback go into the prompt for the next chapter (`src/ai.ts`).
+
+## License
+
+[Apache License 2.0](LICENSE)
