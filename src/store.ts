@@ -30,6 +30,10 @@ export interface Chapter {
   finished: boolean;
   feedback?: Feedback;
   levelDelta?: number;
+  /** the moment of this chapter to illustrate (written by the story model) */
+  scene?: string;
+  /** an illustration is stored for this chapter (see images.ts) */
+  hasImage?: boolean;
 }
 
 export interface Series {
@@ -39,6 +43,8 @@ export interface Series {
   genre: string;
   /** running summary used to keep continuity between chapters */
   storySoFar: string;
+  /** fixed art style + character looks, so every illustration of the series matches */
+  artBible?: string;
   chapters: Chapter[];
   createdAt: number;
   sample?: boolean;
@@ -71,6 +77,9 @@ export interface Settings {
   level: number;
   interests: string;
   fontSize: number;
+  /** illustrate each new chapter (needs an OpenRouter key) */
+  illustrations: boolean;
+  imageModel: string;
 }
 
 export interface State {
@@ -88,6 +97,14 @@ export const OR_MODELS = [
   { id: "google/gemini-4-carbon", label: "Gemini 4 Carbon" },
   { id: "openai/gpt-6.2-sol", label: "GPT-6.2 Sol" },
   { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5 — fastest, cheapest" },
+];
+
+/** OpenRouter image models (suggestions only). */
+export const IMAGE_MODELS = [
+  { id: "google/gemini-nano-banana-2.1", label: "Gemini Nano Banana 2.1" },
+  { id: "google/gemini-3.1-flash-image", label: "Gemini 3.1 Flash Image" },
+  { id: "google/gemini-3-pro-image", label: "Gemini 3 Pro Image — best, pricier" },
+  { id: "openai/gpt-5.4-image-2", label: "GPT-5.4 Image 2" },
 ];
 
 export function activeKey(s: Settings): string {
@@ -113,6 +130,8 @@ function defaults(): State {
       level: 1,
       interests: "",
       fontSize: 20,
+      illustrations: false,
+      imageModel: IMAGE_MODELS[0].id,
     },
     series: [],
     words: {},

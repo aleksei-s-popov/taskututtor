@@ -36,6 +36,12 @@ progress are stored only in your browser; the key is sent only to the provider y
 - **Finish a chapter:** at the end, say whether it was **Too easy**, **Just right** or **Too hard**.
   The app shows how many words you needed and how your level moved, then writes the next chapter
   to match.
+- **Illustrations (optional):** turn on **Illustrate every new chapter** in Settings to get one
+  picture per chapter. They stay consistent across a series: the story model writes a fixed "art
+  bible" (style and each character's look) that goes into every image prompt, and an earlier picture
+  from the series is attached as a visual reference. Tap **↻ Regenerate illustration** under a picture
+  to get a new one, or **🎨 Illustrate this chapter** on chapters that have none. Pictures are made
+  through OpenRouter (an OpenRouter key is needed even if stories come from Anthropic).
 - **Words:** the *learning* tile on the home screen lists the words you looked up. They come back
   in later chapters; mark any you already know.
 - **Settings (⚙):** change provider, key and model, translation language, interests, text size,

@@ -80,12 +80,14 @@ Language:
 Output:
 - paragraphs: the chapter split into paragraphs, each a list of sentences. Each sentence has the Finnish text ("fi", with its punctuation and quotation marks) and a natural translation ("tr") in the reader's translation language. A line of dialogue with its speech tag is one sentence.
 - glossary: one entry for EVERY distinct word form that appears in the Finnish text (function words and names too). "form" is the word exactly as written in the text, lowercased, without surrounding punctuation; hyphenated compounds and forms like "EU:n" are a single form. "lemma" is the dictionary form. "tr" is a short translation of this form as used here, in the translation language. "note" is a very short grammar hint in the translation language (e.g. "inessive of talo", "past, 3rd sg of mennä") or "" when the form is already the dictionary form. "name" is true for proper names.
-- story_so_far: an updated summary in English (max 180 words) of the whole story up to and including this chapter — characters, key facts, open threads — written for yourself to continue the story later.`;
+- story_so_far: an updated summary in English (max 180 words) of the whole story up to and including this chapter — characters, key facts, open threads — written for yourself to continue the story later.
+- art_bible: in English, the fixed visual identity of the series for an illustrator (max 150 words): one consistent art style (medium, palette, mood) that suits the genre, then the exact unchanging look of each recurring character (age, build, hair, face, signature clothing) and key locations. For a continuing series you are given the existing art bible: return it word for word, only appending newly introduced recurring characters or locations.
+- illustration_scene: in English, one visually striking moment from this chapter for a single illustration (max 60 words): who is in frame, what they are doing, setting, light and mood. Do not give away the chapter's final twist.`;
 
 const CHAPTER_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["series_title", "series_premise", "chapter_title", "chapter_title_tr", "paragraphs", "glossary", "story_so_far"],
+  required: ["series_title", "series_premise", "chapter_title", "chapter_title_tr", "paragraphs", "glossary", "story_so_far", "art_bible", "illustration_scene"],
   properties: {
     series_title: { type: "string", description: "Series title in Finnish" },
     series_premise: { type: "string", description: "One-sentence spoiler-free teaser in the translation language" },
@@ -119,6 +121,8 @@ const CHAPTER_SCHEMA = {
       },
     },
     story_so_far: { type: "string" },
+    art_bible: { type: "string" },
+    illustration_scene: { type: "string" },
   },
 };
 
@@ -130,6 +134,8 @@ interface ChapterPayload {
   paragraphs: { fi: string; tr: string }[][];
   glossary: { form: string; lemma: string; tr: string; note: string; name: boolean }[];
   story_so_far: string;
+  art_bible: string;
+  illustration_scene: string;
 }
 
 export interface NewSeriesRequest {
@@ -181,6 +187,7 @@ function buildPrompt(state: State, series: Series | null, req: NewSeriesRequest 
       );
     }
     lines.push(`Return series_title "${series.title}" and the same premise unchanged.`);
+    lines.push(series.artBible ? `Existing art bible (return unchanged, only append new recurring characters/locations): ${series.artBible}` : "There is no art bible yet: write one that fits the story so far.");
   } else if (req) {
     lines.push(
       "",
@@ -215,6 +222,7 @@ function toChapter(p: ChapterPayload, level: number): Chapter {
     lookedUp: [],
     peeked: [],
     finished: false,
+    scene: p.illustration_scene || undefined,
   };
 }
 
@@ -290,14 +298,20 @@ function anthropicText(state: State, prompt: string, onProgress: (chars: number)
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-async function openRouterRequest(state: State, body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
+async function openRouterRequest(
+  state: State,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+  url = OPENROUTER_URL,
+  model = state.settings.orModel,
+): Promise<Response> {
   let res: Response;
   try {
-    res = await fetch(OPENROUTER_URL, {
+    res = await fetch(url, {
       method: "POST",
       signal,
       headers: { Authorization: `Bearer ${state.settings.orKey}`, "Content-Type": "application/json", "X-Title": "Taskututtor" },
-      body: JSON.stringify({ model: state.settings.orModel, ...body }),
+      body: JSON.stringify({ model, ...body }),
     });
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") throw e;
@@ -311,7 +325,7 @@ async function openRouterRequest(state: State, body: Record<string, unknown>, si
   if (res.status === 401) throw new Error(`OpenRouter rejected the key${detail ? ` ("${detail}")` : ""}. Check it in Settings.`);
   if (res.status === 402) throw new Error("Your OpenRouter account is out of credits.");
   if (res.status === 429) throw new Error("Rate limit reached — wait a moment and try again.");
-  if (res.status === 404 || res.status === 400) throw new Error(`OpenRouter couldn't run "${state.settings.orModel}": ${detail || "check the model name in Settings."}`);
+  if (res.status === 404 || res.status === 400) throw new Error(`OpenRouter couldn't run "${model}": ${detail || "check the model name in Settings."}`);
   throw new Error(`OpenRouter error ${res.status}${detail ? ": " + detail : ""}`);
 }
 
@@ -431,4 +445,60 @@ export function glossaryCoverage(ch: Chapter): number {
           if (ch.glossary[formKey(t.text)]) hit++;
         }
   return total ? hit / total : 1;
+}
+
+// ---------- illustrations (OpenRouter Image API) ----------
+
+const OPENROUTER_IMAGES_URL = "https://openrouter.ai/api/v1/images";
+
+const DEFAULT_STYLE =
+  "Painterly digital book illustration with soft natural light and a muted Nordic palette; cinematic composition; the same style in every picture.";
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(new Error("The illustration could not be read."));
+    r.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Paints one illustration for a chapter and returns it as a data URL.
+ * Consistency across a series comes from two things: the series' art bible (fixed style and
+ * character looks) in every prompt, and `reference` — an earlier illustration of the same series
+ * that the image model is asked to match.
+ */
+export async function generateIllustration(state: State, series: Series, ch: Chapter, reference?: string): Promise<string> {
+  const scene =
+    ch.scene ??
+    `A key moment from early in this chapter (not its ending). Chapter "${ch.titleTr || ch.title}": ${ch.paragraphs
+      .flat()
+      .map((s) => s.tr || s.fi)
+      .join(" ")
+      .slice(0, 700)}`;
+  const prompt = [
+    `An illustration for one chapter of the serialized story "${series.title}" (${series.genre}).`,
+    `Art direction — identical in every illustration of this series: ${series.artBible || `${DEFAULT_STYLE} Story: ${series.premise}`}`,
+    `Scene to illustrate: ${scene}`,
+    reference
+      ? "The attached image is an earlier illustration from the same series. Match its art style, palette and rendering exactly, and draw any recurring character with exactly the same face, hair, build and clothing. Compose a new scene — do not copy its composition."
+      : "",
+    "Wide landscape format (3:2). Absolutely no text, letters, captions, speech bubbles, signatures, watermarks or borders in the image.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const body: Record<string, unknown> = { prompt, aspect_ratio: "3:2", n: 1 };
+  if (reference) body.input_references = [{ type: "image_url", image_url: { url: reference } }];
+  const res = await openRouterRequest(state, body, undefined, OPENROUTER_IMAGES_URL, state.settings.imageModel);
+  const json = await res.json().catch(() => null);
+  const item = json?.data?.[0];
+  if (item?.b64_json) return `data:${item.media_type || "image/png"};base64,${item.b64_json}`;
+  if (item?.url) {
+    if (String(item.url).startsWith("data:")) return item.url;
+    const img = await fetch(item.url).catch(() => null);
+    if (img?.ok) return blobToDataUrl(await img.blob());
+  }
+  throw new Error(json?.error?.message ? `Illustration failed: ${json.error.message}` : "The image model returned no picture. Try again or pick another image model in Settings.");
 }

@@ -1,8 +1,9 @@
 import "./style.css";
 import { cefr, finishChapter, knownCount, learningWords, MAX_LEVEL, MIN_LEVEL, type ChapterResult } from "./adapt";
-import { friendlyError, generateChapter, lookupWord, type NewSeriesRequest } from "./ai";
+import { friendlyError, generateChapter, generateIllustration, lookupWord, type NewSeriesRequest } from "./ai";
+import { compress, deleteImage, getImage, putImage } from "./images";
 import { sampleSeries } from "./sample";
-import { activeKey, formKey, load, MODELS, OR_MODELS, save, tokenize, uid, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
+import { activeKey, formKey, IMAGE_MODELS, load, MODELS, OR_MODELS, save, tokenize, uid, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
 
 type View =
   | { name: "onboard" }
@@ -106,9 +107,12 @@ function render(): void {
     case "settings":
       app.innerHTML = settingsView();
       break;
-    case "reader":
+    case "reader": {
       app.innerHTML = readerView();
+      const ch = currentChapter();
+      if (ch) void loadArt(ch);
       break;
+    }
   }
 }
 
@@ -307,10 +311,27 @@ function settingsView(): string {
       <label class="field">Text size: <output id="fs">${s.fontSize}px</output>
         <input name="fontSize" type="range" min="16" max="30" step="1" value="${s.fontSize}">
       </label>
+      <h2>Illustrations</h2>
+      <label class="check">
+        <input type="checkbox" name="illustrations" ${s.illustrations ? "checked" : ""}>
+        <span><b>Illustrate every new chapter</b><small>One picture per chapter, in a consistent style with the same characters. Costs a few cents each.</small></span>
+      </label>
+      ${
+        s.provider === "anthropic"
+          ? `<label class="field">OpenRouter API key <span class="opt">for illustrations</span>
+        <input name="orKey" class="secret" type="text" placeholder="sk-or-…" value="${esc(s.orKey)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <small>Pictures are painted through <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter</a>, even when stories come from Anthropic.</small>
+      </label>`
+          : ""
+      }
+      <label class="field">Illustrator
+        <input name="imageModel" list="image-models" value="${esc(s.imageModel)}" autocomplete="off" spellcheck="false">
+        <datalist id="image-models">${IMAGE_MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join("")}</datalist>
+      </label>
       <button class="btn primary wide" type="submit">Save</button>
     </form>
     <h2>Your data</h2>
-    <p class="hint">Everything is stored on this device only. Export a backup before clearing browser data or switching phones.</p>
+    <p class="hint">Everything is stored on this device only. Export a backup before clearing browser data or switching phones (illustrations are not included — they can be regenerated).</p>
     <div class="row">
       <button class="btn" data-act="export">Export backup</button>
       <label class="btn">Import backup<input type="file" accept="application/json" data-import hidden></label>
@@ -376,12 +397,72 @@ function readerView(): string {
   <main class="page reader">
     <p class="kicker">Chapter ${idx + 1} · ${cefr(ch.level)}</p>
     <h2 class="chapter-title">${esc(ch.title)}</h2>
+    <figure class="art" id="art">${artHtml(ch)}</figure>
     <p class="hint">Tap a word for its meaning. Try to guess first.</p>
     <article class="text">
       ${ch.paragraphs.map((p, pi) => `<p>${p.map((_, si) => sentenceHtml(ch, pi, si)).join("")}</p>`).join("")}
     </article>
     <section class="end" id="end">${endHtml(series, ch, idx)}</section>
   </main>`;
+}
+
+// ---------- illustrations ----------
+
+/** chapter id → data URL, for chapters opened in this session */
+const artCache = new Map<string, string>();
+const painting = new Set<string>();
+
+function artHtml(ch: Chapter): string {
+  const url = artCache.get(ch.id);
+  if (painting.has(ch.id)) {
+    return `${url ? `<img src="${url}" alt="" class="dim">` : ""}<div class="art-wait"><div class="spinner small"></div><span>Painting the illustration…</span></div>`;
+  }
+  if (url) {
+    return `<img src="${url}" alt="Illustration for this chapter">
+      <button class="btn small ghost" data-act="illustrate">↻ Regenerate illustration</button>`;
+  }
+  if (ch.hasImage) return `<div class="art-wait"></div>`; // still loading from storage
+  if (!state.settings.illustrations) return "";
+  return `<button class="btn small" data-act="illustrate">🎨 Illustrate this chapter</button>`;
+}
+
+function refreshArt(ch: Chapter): void {
+  const el = document.getElementById("art");
+  if (el && currentChapter()?.id === ch.id) el.innerHTML = artHtml(ch);
+}
+
+/** Loads the stored picture for the open chapter, if it has one. */
+async function loadArt(ch: Chapter): Promise<void> {
+  if (!ch.hasImage || artCache.has(ch.id)) return;
+  const url = await getImage(ch.id);
+  if (url) artCache.set(ch.id, url);
+  else ch.hasImage = false; // storage was cleared
+  refreshArt(ch);
+}
+
+async function illustrate(series: Series, ch: Chapter): Promise<void> {
+  if (painting.has(ch.id)) return;
+  if (!state.settings.orKey) {
+    toast("Illustrations need an OpenRouter key — add one in Settings.");
+    return;
+  }
+  painting.add(ch.id);
+  refreshArt(ch);
+  try {
+    // Reference picture: the earliest other illustrated chapter of the series anchors the look.
+    const anchor = series.chapters.find((c) => c.id !== ch.id && c.hasImage);
+    const reference = anchor ? (artCache.get(anchor.id) ?? (await getImage(anchor.id))) : undefined;
+    const url = await compress(await generateIllustration(state, series, ch, reference));
+    await putImage(ch.id, url);
+    artCache.set(ch.id, url);
+    ch.hasImage = true;
+    persist();
+  } catch (e) {
+    toast(friendlyError(e));
+  } finally {
+    painting.delete(ch.id);
+    refreshArt(ch);
+  }
 }
 
 // ---------- word sheet ----------
@@ -495,6 +576,7 @@ async function writeChapter(series: Series | null, req: NewSeriesRequest | null)
     if (target) {
       target.chapters.push(chapter);
       target.storySoFar = payload.story_so_far;
+      if (payload.art_bible) target.artBible = payload.art_bible;
     } else {
       target = {
         id: uid(),
@@ -502,6 +584,7 @@ async function writeChapter(series: Series | null, req: NewSeriesRequest | null)
         premise: payload.series_premise,
         genre: req?.genre ?? "Story",
         storySoFar: payload.story_so_far,
+        artBible: payload.art_bible || undefined,
         chapters: [chapter],
         createdAt: Date.now(),
       };
@@ -509,6 +592,7 @@ async function writeChapter(series: Series | null, req: NewSeriesRequest | null)
     }
     persist();
     go({ name: "reader", seriesId: target.id, idx: target.chapters.length - 1 });
+    if (state.settings.illustrations && state.settings.orKey) void illustrate(target, chapter);
   } catch (e) {
     toast(friendlyError(e));
   } finally {
@@ -539,10 +623,20 @@ document.addEventListener("click", (ev) => {
     case "delete-series": {
       const s = state.series.find((x) => x.id === d.id);
       if (s && confirm(`Delete "${s.title}" and its chapters? Your word knowledge is kept.`)) {
+        for (const c of s.chapters) {
+          artCache.delete(c.id);
+          if (c.hasImage) void deleteImage(c.id);
+        }
         state.series = state.series.filter((x) => x.id !== d.id);
         persist();
         render();
       }
+      break;
+    }
+    case "illustrate": {
+      const series = currentSeries();
+      const ch = currentChapter();
+      if (series && ch) void illustrate(series, ch);
       break;
     }
     case "word":
@@ -654,6 +748,9 @@ document.addEventListener("submit", (ev) => {
       if (f.has("model")) s.model = text("model") || s.model;
       if (f.has("orModel")) s.orModel = text("orModel") || OR_MODELS[0].id;
       s.fontSize = Number(f.get("fontSize")) || s.fontSize;
+      s.illustrations = f.has("illustrations");
+      s.imageModel = text("imageModel") || IMAGE_MODELS[0].id;
+      if (s.illustrations && !s.orKey) switched = "Illustrations need an OpenRouter key — add one above.";
       toast(switched || "Saved");
     } else {
       s.onboarded = true;
