@@ -308,7 +308,7 @@ async function openRouterRequest(state: State, body: Record<string, unknown>, si
     .json()
     .then((j) => String(j?.error?.message ?? ""))
     .catch(() => "");
-  if (res.status === 401) throw new Error("Your OpenRouter key was rejected. Check it in Settings.");
+  if (res.status === 401) throw new Error(`OpenRouter rejected the key${detail ? ` ("${detail}")` : ""}. Check it in Settings.`);
   if (res.status === 402) throw new Error("Your OpenRouter account is out of credits.");
   if (res.status === 429) throw new Error("Rate limit reached — wait a moment and try again.");
   if (res.status === 404 || res.status === 400) throw new Error(`OpenRouter couldn't run "${state.settings.orModel}": ${detail || "check the model name in Settings."}`);

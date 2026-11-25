@@ -149,13 +149,13 @@ function keyField(full: boolean): string {
     ${
       or
         ? `<label class="field">OpenRouter API key
-      <input name="orKey" type="password" placeholder="sk-or-…" value="${esc(s.orKey)}" autocomplete="off">
+      <input name="orKey" class="secret" type="text" inputmode="text" placeholder="sk-or-…" value="${esc(s.orKey)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
       <small>Stories are written with your own key from
         <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>.
         It is stored only on this device and sent only to OpenRouter.</small>
     </label>`
         : `<label class="field">Claude API key
-      <input name="apiKey" type="password" placeholder="sk-ant-…" value="${esc(s.apiKey)}" autocomplete="off">
+      <input name="apiKey" class="secret" type="text" inputmode="text" placeholder="sk-ant-…" value="${esc(s.apiKey)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
       <small>Your own key from
         <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">platform.claude.com</a>.
         It is stored only on this device and sent only to Anthropic.</small>
@@ -206,7 +206,7 @@ function libraryView(): string {
       return `
       <article class="card">
         <div class="card-top">
-          <span class="tag">${esc(s.genre)}</span>
+          <span class="tag">${s.sample ? "Sample · " : ""}${esc(s.genre)}</span>
           <button class="icon" data-act="delete-series" data-id="${s.id}" aria-label="Delete series">✕</button>
         </div>
         <h3>${esc(s.title)}</h3>
@@ -628,8 +628,23 @@ document.addEventListener("submit", (ev) => {
 
   if (form.dataset.form === "onboard" || form.dataset.form === "settings") {
     if (f.has("provider")) s.provider = text("provider") === "anthropic" ? "anthropic" : "openrouter";
-    if (f.has("apiKey")) s.apiKey = text("apiKey");
-    if (f.has("orKey")) s.orKey = text("orKey");
+    // Keys must not contain whitespace (easy to pick up when pasting on a phone).
+    const key = (k: string) => text(k).replace(/\s+/g, "");
+    if (f.has("apiKey")) s.apiKey = key("apiKey");
+    if (f.has("orKey")) s.orKey = key("orKey");
+    // A key pasted into the wrong provider's field: move it and switch provider.
+    let switched = "";
+    if (s.provider === "openrouter" && s.orKey.startsWith("sk-ant-")) {
+      s.apiKey = s.orKey;
+      s.orKey = "";
+      s.provider = "anthropic";
+      switched = "That is an Anthropic key — switched the provider to Anthropic.";
+    } else if (s.provider === "anthropic" && s.apiKey.startsWith("sk-or-")) {
+      s.orKey = s.apiKey;
+      s.apiKey = "";
+      s.provider = "openrouter";
+      switched = "That is an OpenRouter key — switched the provider to OpenRouter.";
+    }
     s.lang = text("lang") || "English";
     s.interests = text("interests");
     // The slider snaps to 0.25 steps, so only take its value when the reader actually moved it.
@@ -639,7 +654,7 @@ document.addEventListener("submit", (ev) => {
       if (f.has("model")) s.model = text("model") || s.model;
       if (f.has("orModel")) s.orModel = text("orModel") || OR_MODELS[0].id;
       s.fontSize = Number(f.get("fontSize")) || s.fontSize;
-      toast("Saved");
+      toast(switched || "Saved");
     } else {
       s.onboarded = true;
       // The built-in sample is A1 and its translations are in English.

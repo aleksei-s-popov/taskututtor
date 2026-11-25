@@ -602,3 +602,8 @@ input[type="range"] {
     animation-duration: 3s !important;
   }
 }
+
+/* API keys: masked like a password, but not a password field (keeps password managers from autofilling it) */
+.secret:not(:focus) {
+  -webkit-text-security: disc;
+}
