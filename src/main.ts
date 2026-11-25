@@ -2,7 +2,7 @@ import "./style.css";
 import { cefr, finishChapter, knownCount, learningWords, MAX_LEVEL, MIN_LEVEL, type ChapterResult } from "./adapt";
 import { friendlyError, generateChapter, lookupWord, type NewSeriesRequest } from "./ai";
 import { sampleSeries } from "./sample";
-import { formKey, load, MODELS, save, tokenize, uid, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
+import { activeKey, formKey, load, MODELS, OR_MODELS, save, tokenize, uid, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
 
 type View =
   | { name: "onboard" }
@@ -132,14 +132,48 @@ function langField(): string {
     </label>`;
 }
 
-function keyField(): string {
+function keyField(full: boolean): string {
+  const s = state.settings;
+  const or = s.provider === "openrouter";
   return `
-    <label class="field">Claude API key
-      <input name="apiKey" type="password" placeholder="sk-ant-…" value="${esc(state.settings.apiKey)}" autocomplete="off">
-      <small>Stories are written by Claude using your own key from
+    ${
+      full
+        ? `<label class="field">AI provider
+      <select name="provider" data-rerender>
+        <option value="openrouter" ${or ? "selected" : ""}>OpenRouter — any model, one key</option>
+        <option value="anthropic" ${or ? "" : "selected"}>Anthropic — Claude directly</option>
+      </select>
+    </label>`
+        : ""
+    }
+    ${
+      or
+        ? `<label class="field">OpenRouter API key
+      <input name="orKey" type="password" placeholder="sk-or-…" value="${esc(s.orKey)}" autocomplete="off">
+      <small>Stories are written with your own key from
+        <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>.
+        It is stored only on this device and sent only to OpenRouter.</small>
+    </label>`
+        : `<label class="field">Claude API key
+      <input name="apiKey" type="password" placeholder="sk-ant-…" value="${esc(s.apiKey)}" autocomplete="off">
+      <small>Your own key from
         <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">platform.claude.com</a>.
         It is stored only on this device and sent only to Anthropic.</small>
-    </label>`;
+    </label>`
+    }
+    ${
+      !full
+        ? ""
+        : or
+          ? `<label class="field">Story writer
+      <input name="orModel" list="or-models" value="${esc(s.orModel)}" autocomplete="off" spellcheck="false">
+      <datalist id="or-models">${OR_MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join("")}</datalist>
+      <small>Any model id from <a href="https://openrouter.ai/models" target="_blank" rel="noopener">openrouter.ai/models</a>. Default: ${OR_MODELS[0].id}.</small>
+    </label>`
+          : `<label class="field">Story writer
+      <select name="model">${MODELS.map((m) => `<option value="${m.id}" ${m.id === s.model ? "selected" : ""}>${m.label}</option>`).join("")}</select>
+    </label>`
+    }`;
 }
 
 function onboardView(): string {
@@ -155,7 +189,7 @@ function onboardView(): string {
       <label class="field">What do you like to read? <span class="opt">optional</span>
         <input name="interests" placeholder="e.g. detective stories, space, cooking, dark humour">
       </label>
-      ${keyField()}
+      ${keyField(false)}
       <p class="hint">No key yet? You can add it later in Settings and start with the free sample chapter.</p>
       <button class="btn primary" type="submit">Start reading</button>
     </form>
@@ -198,7 +232,7 @@ function libraryView(): string {
       <div><b>${knownCount(state)}</b><small>words known</small></div>
       <button data-act="nav" data-to="words"><b>${learning}</b><small>learning ›</small></button>
     </section>
-    ${state.settings.apiKey ? "" : `<p class="notice">Add your Claude API key in <a href="#" data-act="nav" data-to="settings">Settings</a> to generate new stories. The sample below works without it.</p>`}
+    ${activeKey(state.settings) ? "" : `<p class="notice">Add your API key in <a href="#" data-act="nav" data-to="settings">Settings</a> to generate new stories. The sample below works without it.</p>`}
     <h2>Your series</h2>
     ${cards || `<p class="hint">Nothing here yet — start your first series.</p>`}
     <button class="btn primary wide" data-act="nav" data-to="new">＋ New series</button>
@@ -261,10 +295,7 @@ function settingsView(): string {
   </header>
   <main class="page">
     <form data-form="settings">
-      ${keyField()}
-      <label class="field">Story writer
-        <select name="model">${MODELS.map((m) => `<option value="${m.id}" ${m.id === s.model ? "selected" : ""}>${m.label}</option>`).join("")}</select>
-      </label>
+      ${keyField(true)}
       ${langField()}
       <label class="field">Interests
         <input name="interests" value="${esc(s.interests)}" placeholder="e.g. detective stories, space, cooking">
@@ -405,10 +436,10 @@ async function openWord(el: HTMLElement): Promise<void> {
   const peeked = ch.peeked.includes(sid);
 
   let g: GlossEntry | null = ch.glossary[key] ?? null;
-  sheet.innerHTML = sheetHtml(word, g, state.settings.apiKey ? "Looking up…" : "No translation saved for this word. Add an API key in Settings to look it up.", peeked);
+  sheet.innerHTML = sheetHtml(word, g, activeKey(state.settings) ? "Looking up…" : "No translation saved for this word. Add an API key in Settings to look it up.", peeked);
   sheet.classList.add("open");
 
-  if (!g && state.settings.apiKey) {
+  if (!g && activeKey(state.settings)) {
     try {
       g = await lookupWord(state, word, ctx.sentence.fi);
       ch.glossary[key] = g;
@@ -438,8 +469,8 @@ function markLooked(ch: Chapter, lemma: string): void {
 // ---------- generation ----------
 
 async function writeChapter(series: Series | null, req: NewSeriesRequest | null): Promise<void> {
-  if (!state.settings.apiKey) {
-    toast("Add your Claude API key in Settings to generate stories.");
+  if (!activeKey(state.settings)) {
+    toast("Add your API key in Settings to generate stories.");
     return go({ name: "settings" });
   }
   overlay.innerHTML = `
@@ -596,14 +627,17 @@ document.addEventListener("submit", (ev) => {
   const text = (k: string) => String(f.get(k) ?? "").trim();
 
   if (form.dataset.form === "onboard" || form.dataset.form === "settings") {
-    s.apiKey = text("apiKey");
+    if (f.has("provider")) s.provider = text("provider") === "anthropic" ? "anthropic" : "openrouter";
+    if (f.has("apiKey")) s.apiKey = text("apiKey");
+    if (f.has("orKey")) s.orKey = text("orKey");
     s.lang = text("lang") || "English";
     s.interests = text("interests");
     // The slider snaps to 0.25 steps, so only take its value when the reader actually moved it.
     const slider = form.querySelector<HTMLInputElement>('input[type="range"][name="level"]');
     if (!slider || slider.dataset.dirty) s.level = Number(f.get("level")) || s.level;
     if (form.dataset.form === "settings") {
-      s.model = text("model") || s.model;
+      if (f.has("model")) s.model = text("model") || s.model;
+      if (f.has("orModel")) s.orModel = text("orModel") || OR_MODELS[0].id;
       s.fontSize = Number(f.get("fontSize")) || s.fontSize;
       toast("Saved");
     } else {
@@ -627,6 +661,13 @@ document.addEventListener("input", (ev) => {
 
 document.addEventListener("change", async (ev) => {
   const el = ev.target as HTMLInputElement;
+  if (el.matches("[data-rerender]")) {
+    // Switching provider swaps the key and model fields.
+    state.settings.provider = el.value === "anthropic" ? "anthropic" : "openrouter";
+    persist();
+    render();
+    return;
+  }
   if (!el.matches("[data-import]") || !el.files?.[0]) return;
   try {
     const data = JSON.parse(await el.files[0].text());

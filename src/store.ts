@@ -54,8 +54,15 @@ export interface WordStat {
   lastSeen: number;
 }
 
+export type Provider = "openrouter" | "anthropic";
+
 export interface Settings {
   onboarded: boolean;
+  provider: Provider;
+  /** OpenRouter key + model */
+  orKey: string;
+  orModel: string;
+  /** Anthropic key + model */
   apiKey: string;
   model: string;
   /** language translations are shown in */
@@ -74,6 +81,19 @@ export interface State {
 
 const KEY = "taskututtor.v1";
 
+/** Suggestions only — any OpenRouter model id can be typed in. */
+export const OR_MODELS = [
+  { id: "anthropic/claude-sonnet-5.5", label: "Claude Sonnet 5.5 — great stories, moderate price" },
+  { id: "anthropic/claude-opus-5.5", label: "Claude Opus 5.5 — best stories, pricier" },
+  { id: "google/gemini-4-carbon", label: "Gemini 4 Carbon" },
+  { id: "openai/gpt-6.2-sol", label: "GPT-6.2 Sol" },
+  { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5 — fastest, cheapest" },
+];
+
+export function activeKey(s: Settings): string {
+  return s.provider === "openrouter" ? s.orKey : s.apiKey;
+}
+
 export const MODELS = [
   { id: "claude-opus-5-5", label: "Claude Opus 5.5 — best stories" },
   { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5 — faster, cheaper" },
@@ -84,6 +104,9 @@ function defaults(): State {
   return {
     settings: {
       onboarded: false,
+      provider: "openrouter",
+      orKey: "",
+      orModel: OR_MODELS[0].id,
       apiKey: "",
       model: MODELS[0].id,
       lang: "English",
@@ -102,8 +125,10 @@ export function load(): State {
     const raw = localStorage.getItem(KEY);
     if (!raw) return base;
     const saved = JSON.parse(raw) as Partial<State>;
+    // Saved before providers existed: keep using the Anthropic key that was entered.
+    const legacy: Partial<Settings> = saved.settings && !saved.settings.provider && saved.settings.apiKey ? { provider: "anthropic" } : {};
     return {
-      settings: { ...base.settings, ...saved.settings },
+      settings: { ...base.settings, ...saved.settings, ...legacy },
       series: saved.series ?? [],
       words: saved.words ?? {},
     };
