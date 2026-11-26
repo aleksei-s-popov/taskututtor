@@ -1,0 +1,59 @@
+<!doctype html>
+<!--
+  Privacy notice. Written from what the code does (see docs/privacy-draft.md).
+  BEFORE PUBLISHING: replace the two bracketed placeholders below with who operates the service
+  and how to reach you, and have the text checked against the law that applies to you.
+  `npm run deploy` refuses to run while a placeholder is still here.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy — Taskututtor</title>
+    <meta name="theme-color" content="#0c111d" />
+    <link rel="icon" href="mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href="/" aria-label="Taskututtor">
+        <img src="mark.svg" alt="" width="38" height="38" />
+        <span>Taskututtor</span>
+      </a>
+      <nav><a class="btn small" href="/app/">Sign in</a></nav>
+    </header>
+    <main class="prose">
+      <p class="eyebrow">Privacy</p>
+      <h1>What we keep, and what we don’t.</h1>
+
+      <h2>Who is responsible</h2>
+      <p>Taskututtor is operated by [OPERATOR NAME AND ADDRESS]. For any question about your data, or to ask for a copy or deletion, write to [CONTACT EMAIL].</p>
+
+      <h2>What the service stores</h2>
+      <ul>
+        <li><b>Your account.</b> Your email address and sign-in sessions are handled by Clerk, our sign-in provider.</li>
+        <li><b>Your reading.</b> The stories written for you, your reading level, the words you looked up and the words you are treated as knowing, your answers to chapter questions, and your settings. This is stored on Cloudflare so that it follows you between devices.</li>
+        <li><b>Illustrations</b> made for your chapters, stored the same way.</li>
+        <li><b>Reports you send.</b> If you use “Report a problem”, we keep what you wrote and which chapter it was about.</li>
+        <li><b>Backups.</b> A weekly copy of the database, kept for about three months.</li>
+      </ul>
+
+      <h2>What is sent to AI providers</h2>
+      <p>To write your chapters, word lists, dictionary entries and illustrations, the service sends requests to AI models through OpenRouter. These contain your reading level, the interests you entered, the words you are learning and the story so far. They do not contain your name or email address.</p>
+
+      <h2>Usage data</h2>
+      <p>We record how the service is used, with PostHog, hosted in the EU: signing in, screens opened, chapters requested and finished, your feedback on a chapter, how many words you looked up, question scores, features used, errors, and the cost and duration of each AI request. These records are linked to your account number, not your email address.</p>
+      <p>We do not record the text of your stories, the words you look up, what you type, your screen, or your clicks in general. No analytics cookie or other identifier is stored on your device. If we ask you a short question inside the app, your device remembers that you have already seen it.</p>
+
+      <h2>What we do not do</h2>
+      <p>No advertising. No selling of data. No sharing beyond the providers named on this page.</p>
+
+      <h2>Your choices</h2>
+      <p>You can ask us at any time what we hold about you, to correct it, or to delete your account and everything stored with it.</p>
+    </main>
+    <footer class="foot">
+      <p><b>Taskututtor</b></p>
+      <p><a href="/">Home</a></p>
+    </footer>
+  </body>
+</html>

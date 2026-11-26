@@ -134,11 +134,43 @@ Useful first views: a funnel from `signed_in` to the third `chapter_finished`; r
 What is deliberately not collected: story text, prompts, looked-up words, anything a reader
 types, email addresses (readers appear under their Clerk account id), session recordings, and
 clicks in general (autocapture is off). Nothing is stored on the reader's device for analytics,
-so there is no analytics cookie. You still need a privacy notice that says usage data is
-collected: a starting point is in [docs/privacy-draft.md](../docs/privacy-draft.md).
+so there is no analytics cookie. The landing site carries the privacy notice that says so
+(`site/public/privacy.html`, written from [docs/privacy-draft.md](../docs/privacy-draft.md)).
+
+**Surveys.** PostHog's in-app surveys are switched on in the app. Create one in PostHog
+(*Surveys → New survey*, type *Popover*) and it appears for signed-in readers without a deploy.
+To ask at a good moment, set *Display conditions → when the user sends an event* to
+`chapter_finished`. A sensible first survey: after a reader's third finished chapter, "How likely
+are you to recommend Taskututtor to someone learning Finnish?" with an optional comment. This is
+the only PostHog feature that loads an extra script, and the reader's device remembers which
+surveys it has already shown.
 
 Automated browsers are ignored by PostHog; end-to-end tests that need to see their own events
 build the app with `VITE_POSTHOG_COUNT_BOTS=1`.
+
+## Problem reports
+
+Readers can report a problem from Settings and from the end of any chapter: wrong Finnish, a wrong
+translation, inappropriate content, a bug, or something else, with an optional description. (App
+stores require a way to report AI-generated content.) Reports are stored in the `reports` table;
+PostHog only receives a `problem_reported` event with the category.
+
+Read the open ones:
+
+```bash
+npx wrangler d1 execute taskututtor --remote --command "SELECT created_at, category, user_id, chapter_id, message FROM reports WHERE status = 'new' ORDER BY created_at"
+```
+
+See the chapter a report is about, and mark reports as handled:
+
+```bash
+npx wrangler d1 execute taskututtor --remote --command "SELECT data FROM chapters WHERE id = '<chapter_id>'"
+npx wrangler d1 execute taskututtor --remote --command "UPDATE reports SET status = 'done' WHERE status = 'new'"
+```
+
+There is no notification when a report arrives: check the table regularly, or add a PostHog
+alert on the `problem_reported` event. In the open-source build the same button opens the
+repository's issue form instead.
 
 ## Landing page
 
@@ -152,6 +184,9 @@ goes out with every `npm run deploy` and is served at `/`.
   the waitlist off, the same button opens normal sign-up.
 - **No price yet:** the *Membership* section describes what is included and offers the waitlist.
   Add a price there once billing exists.
+- **Privacy page:** `site/public/privacy.html` is linked from the footer and from the app's
+  Settings. It contains two placeholders, for who operates the service and a contact address.
+  `npm run deploy` stops with a message until you have filled them in.
 - **Share image:** set `og:image` in `index.html` to a full address
   (`https://your-domain/img/og.png`); social networks do not follow relative ones.
 - **Preview locally:** open `site/public/index.html` in a browser, or run `npm run build:web`
@@ -226,6 +261,7 @@ All routes need `Authorization: Bearer <Clerk session token>`.
 | `GET /api/images/:chapterId` | a chapter's illustration |
 | `POST /api/chapters/:id/illustrate` | paint or repaint an illustration |
 | `POST /api/chapters/:id/glossary` | write a chapter's glossary if it is still missing |
+| `POST /api/reports` | file a problem report |
 | `POST /api/lookup`, `POST /api/dict` | AI word lookup and dictionary entry |
 
 Sync is last-write-wins per document: fine for one reader moving between devices, not built

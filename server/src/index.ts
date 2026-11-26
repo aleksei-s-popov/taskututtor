@@ -47,6 +47,9 @@ const DEFAULT_PROFILE: Profile = { level: 1, lang: "English", interests: "", yki
 /** Reader-owned fields of a chapter that the app may change; the rest is written by the server. */
 const PROGRESS_FIELDS = ["lookedUp", "peeked", "answers", "finished", "feedback", "levelDelta", "glossary"] as const;
 
+/** What a reader can report from inside the app. */
+const REPORT_CATEGORIES = ["finnish", "translation", "content", "bug", "other"];
+
 class HttpError extends Error {
   constructor(
     public status: number,
@@ -464,6 +467,19 @@ async function route(req: Request, env: Env): Promise<Response> {
       const profile = await loadProfile(env, user);
       if (!(await writeGlossary(env, user, chapter, profile.data.lang))) throw new HttpError(502, "The word meanings could not be prepared. Try again in a moment.");
     }
+    return Response.json({ ok: true });
+  }
+
+  // A reader reports a problem. The text is stored for the operator; analytics only gets the category.
+  if (m("POST", /^\/api\/reports$/)) {
+    const b = await body<{ category?: string; message?: string; chapterId?: string; screen?: string }>();
+    const category = REPORT_CATEGORIES.includes(String(b.category)) ? String(b.category) : "other";
+    const message = String(b.message ?? "").trim().slice(0, 2000);
+    const chapterId = b.chapterId ? String(b.chapterId).slice(0, 40) : null;
+    await env.DB.prepare("INSERT INTO reports (id, user_id, category, message, chapter_id, screen, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(id(), user, category, message, chapterId, String(b.screen ?? "").slice(0, 40), Date.now())
+      .run();
+    capture(env, user, "problem_reported", { category, with_message: !!message, about_chapter: !!chapterId });
     return Response.json({ ok: true });
   }
 

@@ -5,7 +5,8 @@
 //    open-source build never loads it and sends nothing anywhere.
 //  - No autocapture, no session recording, no page text: only the named events below, with
 //    numbers and categories as properties. Never story text, looked-up words or anything typed.
-//  - Nothing is stored on the device (memory only), so there is no analytics cookie.
+//  - No identifier is stored on the device (memory only), so there is no analytics cookie. The one
+//    thing PostHog's survey module keeps locally is a note of which surveys were already shown.
 //  - Readers are identified by their account id, never by email.
 
 import type { PostHog } from "posthog-js";
@@ -40,10 +41,12 @@ export async function initAnalytics(): Promise<void> {
       capture_pageleave: false,
       capture_performance: false,
       capture_exceptions: false, // reported by hand below, without loading extra scripts
+      capture_dead_clicks: false,
+      enable_heatmaps: false,
       disable_session_recording: true,
-      disable_surveys: true,
-      disable_external_dependency_loading: true,
-      advanced_disable_flags: true,
+      // In-app surveys are the one PostHog feature that loads an extra script: they are created
+      // and edited in PostHog, and shown by PostHog's own survey module.
+      disable_surveys: false,
       // PostHog ignores automated browsers; end-to-end tests set this to see their own events.
       opt_out_useragent_filter: import.meta.env.VITE_POSTHOG_COUNT_BOTS === "1",
     });

@@ -9,7 +9,7 @@
 
 import type { Env } from "./bindings";
 
-const TABLES = ["profiles", "series", "chapters", "jobs"];
+const TABLES = ["profiles", "series", "chapters", "jobs", "reports"];
 const PAGE = 200;
 
 function literal(v: unknown): string {

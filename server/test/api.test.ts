@@ -248,6 +248,20 @@ describe("account API", () => {
     expect(job).toMatchObject({ status: "error", error: "That series no longer exists." });
   });
 
+  it("stores a reader's problem report and tells analytics only its category", async () => {
+    const sent = await call("alice", "POST", "/reports", { category: "content", message: "This chapter upset me because of PRIVATE-DETAIL.", chapterId: "abc123", screen: "reader" });
+    expect(sent.status).toBe(200);
+    expect((await call("alice", "POST", "/reports", { category: "nonsense" })).status).toBe(200); // unknown kinds are filed as "other"
+    expect((await call(null, "POST", "/reports", { category: "bug" })).status).toBe(401);
+    await new Promise((r) => setTimeout(r, 300));
+    const reported = events.filter((e) => e.event === "problem_reported").map((e) => e.properties);
+    expect(reported).toMatchObject([
+      { category: "content", with_message: true, about_chapter: true },
+      { category: "other", with_message: false, about_chapter: false },
+    ]);
+    expect(JSON.stringify(events)).not.toContain("PRIVATE-DETAIL");
+  });
+
   it("reports usage, AI cost and failures to analytics, without any story content", async () => {
     await new Promise((r) => setTimeout(r, 500)); // background sends
     const of = (user: string, event: string) => events.filter((e) => e.distinct_id === `dev:${user}` && e.event === event);

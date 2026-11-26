@@ -43,3 +43,16 @@ CREATE TABLE IF NOT EXISTS jobs (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS jobs_user ON jobs (user_id, created_at);
+
+-- Problems reported by readers from inside the app (wrong Finnish, inappropriate content, bugs).
+CREATE TABLE IF NOT EXISTS reports (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL,
+  category   TEXT NOT NULL,
+  message    TEXT NOT NULL DEFAULT '',
+  chapter_id TEXT,
+  screen     TEXT,
+  status     TEXT NOT NULL DEFAULT 'new',   -- new | done
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS reports_status ON reports (status, created_at);

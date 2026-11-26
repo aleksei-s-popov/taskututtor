@@ -461,6 +461,10 @@ function settingsView(): string {
           : ""
     }
     ${accountOnly ? "" : `<p class="hint">Open-source build: stories are written with your own API key, and everything is stored in this browser only.</p>`}
+    <p class="row">
+      <button class="btn small" data-act="report">Report a problem</button>
+      ${accountOnly ? `<a class="btn small" href="../privacy.html" target="_blank" rel="noopener">Privacy</a>` : ""}
+    </p>
     <form data-form="settings">
       ${inCloud() ? "" : keyField(true)}
       ${langField()}
@@ -614,6 +618,7 @@ function readerView(): string {
       ${ch.paragraphs.map((p, pi) => `<p>${p.map((_, si) => sentenceHtml(ch, pi, si)).join("")}</p>`).join("")}
     </article>
     <section class="end" id="end">${endHtml(series, ch, idx)}</section>
+    <p class="report-link"><button class="link" data-act="report">Report a problem with this chapter</button></p>
   </main>`;
 }
 
@@ -836,6 +841,42 @@ async function illustrate(series: Series, ch: Chapter): Promise<void> {
     painting.delete(ch.id);
     refreshArt(ch);
   }
+}
+
+// ---------- report a problem ----------
+
+const REPORT_KINDS: [string, string][] = [
+  ["finnish", "The Finnish is wrong"],
+  ["translation", "A translation or word meaning is wrong"],
+  ["content", "Inappropriate or upsetting content"],
+  ["bug", "Something is broken"],
+  ["other", "Something else"],
+];
+
+/** The source repository, where problems with the open-source build are reported. */
+const ISSUES_URL = "https://github.com/aleksei-s-popov/taskututtor/issues/new";
+
+function openReport(): void {
+  if (!accountOnly) {
+    // The open-source build has no server to send a report to.
+    window.open(ISSUES_URL, "_blank", "noopener");
+    return;
+  }
+  const ch = currentChapter();
+  overlay.innerHTML = `
+    <form class="report" data-form="report">
+      <h3>Report a problem</h3>
+      <p class="hint">${ch ? `About “${esc(ch.title)}”. ` : ""}Thank you for telling us. A person reads every report.</p>
+      <div class="choices">
+        ${REPORT_KINDS.map(([v, label], i) => `<label class="choice"><input type="radio" name="category" value="${v}" ${i === 0 ? "checked" : ""}><span>${label}</span></label>`).join("")}
+      </div>
+      <label class="field">What happened? <span class="opt">optional</span>
+        <textarea name="message" rows="4" maxlength="2000" placeholder="For example: which sentence, and what looks wrong"></textarea>
+      </label>
+      <button class="btn primary wide" type="submit">Send report</button>
+      <button class="btn wide" type="button" data-act="report-cancel">Cancel</button>
+    </form>`;
+  overlay.classList.add("open");
 }
 
 // ---------- word glossary (arrives a little after the story) ----------
@@ -1218,6 +1259,12 @@ document.addEventListener("click", (ev) => {
       // Send what is unsent before leaving the account.
       void syncNow(false).then(() => cloud.signOut());
       break;
+    case "report":
+      openReport();
+      break;
+    case "report-cancel":
+      overlay.classList.remove("open");
+      break;
     case "gen-background":
       overlay.classList.remove("open");
       go({ name: "library" });
@@ -1441,6 +1488,20 @@ document.addEventListener("submit", (ev) => {
     }
     persist();
     go({ name: "library" });
+  } else if (form.dataset.form === "report") {
+    const ch = currentChapter();
+    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    button.disabled = true;
+    cloud
+      .api("/api/reports", "POST", { category: text("category"), message: text("message"), chapterId: ch?.id, screen: view.name })
+      .then(() => {
+        overlay.classList.remove("open");
+        toast("Thank you — your report has been sent.");
+      })
+      .catch((e) => {
+        button.disabled = false;
+        toast(friendlyError(e));
+      });
   } else if (form.dataset.form === "new") {
     void writeChapter(null, { genre: text("genre"), idea: text("idea"), from: state.series.find((x) => x.id === text("from")) });
   }

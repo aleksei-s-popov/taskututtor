@@ -1,4 +1,7 @@
-# Privacy notice: draft
+# Privacy notice: working notes
+
+The published version is `site/public/privacy.html`. Keep the two in step when what the service
+collects changes.
 
 This is a factual starting point for the production service's privacy notice, written from what
 the code does. It is **not legal advice and not ready to publish**: add who operates the service
