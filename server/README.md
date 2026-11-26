@@ -50,6 +50,9 @@ domain under *Workers & Pages → taskututtor → Settings → Domains*.
 
 ## Set up
 
+A checklist of everything that needs the owner (accounts, operator details, decisions) is in
+[docs/before-launch.md](../docs/before-launch.md).
+
 You need a Cloudflare account, a Clerk application and an OpenRouter key.
 
 ```bash
