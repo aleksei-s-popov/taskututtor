@@ -982,13 +982,27 @@ body:has(#player.open) .page {
   }
 }
 
-/* series cover on the home screen: the story's first illustration */
+/* series cover on the home screen: a small thumbnail of the story's first illustration */
+
+.card-top {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.card-head {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 
 .cover {
-  margin: -14px -16px 8px;
-  aspect-ratio: 2 / 1;
+  flex: none;
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
   background: var(--tint);
-  border-radius: calc(var(--r) - 1px) calc(var(--r) - 1px) 0 0;
   overflow: hidden;
   cursor: pointer;
 }
@@ -998,4 +1012,8 @@ body:has(#player.open) .page {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.card-top .icon {
+  margin: -10px -10px 0 0;
 }

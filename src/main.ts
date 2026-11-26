@@ -220,12 +220,14 @@ function libraryView(): string {
       const cover = s.chapters.find((c) => c.hasImage);
       return `
       <article class="card">
-        ${cover ? `<div class="cover" data-cover="${cover.id}" data-act="open" data-id="${s.id}" data-idx="${next}"></div>` : ""}
         <div class="card-top">
-          <span class="tag">${s.sample ? "Sample · " : ""}${esc(s.genre)}</span>
+          ${cover ? `<div class="cover" data-cover="${cover.id}" data-act="open" data-id="${s.id}" data-idx="${next}"></div>` : ""}
+          <div class="card-head">
+            <span class="tag">${s.sample ? "Sample · " : ""}${esc(s.genre)}</span>
+            <h3>${esc(s.title)}</h3>
+          </div>
           <button class="icon" data-act="delete-series" data-id="${s.id}" aria-label="Delete series">${icon("trash", 18)}</button>
         </div>
-        <h3>${esc(s.title)}</h3>
         <p>${esc(s.premise)}</p>
         <div class="card-foot">
           <small>${done} of ${s.chapters.length} chapter${s.chapters.length === 1 ? "" : "s"} read</small>
