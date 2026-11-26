@@ -55,13 +55,32 @@ describe("buildPrompt", () => {
     expect(buildPrompt(state({}, [old]), old, null)).toContain("has been stalling");
   });
 
-  it("adds YKI themes and questions only when the reader prepares for the test", () => {
-    const on = buildPrompt(state({ yki: true }), null, { genre: "Mystery", idea: "" });
-    expect(on).toContain("YKI theme");
-    expect(on).toContain("exactly 3 multiple-choice");
+  it("plans YKI topics into the plot instead of bolting one onto each chapter", () => {
+    const fresh = buildPrompt(state({ yki: true }), null, { genre: "Mystery", idea: "" });
+    expect(fresh).toContain("Planning for the YKI goal");
+    expect(fresh).toContain("exactly 3 multiple-choice");
+    expect(fresh).not.toContain("This chapter's YKI theme");
+
+    // Mid-story the plan already carries the topics: no new planning, no forced detours.
+    const s = series("a", [ch("1")], { plan });
+    const mid = buildPrompt(state({ yki: true }, [s]), s, null);
+    expect(mid).not.toContain("Planning for the YKI goal");
+    expect(mid).toContain("Never add an errand");
+
+    // A sequel is a new plan, so the topics are planned in again.
+    const done = series("b", [ch("1"), ch("2"), ch("3")], { plan });
+    expect(buildPrompt(state({ yki: true }, [done]), done, null)).toContain("Planning for the YKI goal");
+
     const off = buildPrompt(state({ yki: false }), null, { genre: "Mystery", idea: "" });
-    expect(off).not.toContain("YKI theme");
+    expect(off).not.toContain("YKI");
     expect(off).toContain("questions: return an empty list");
+  });
+
+  it("asks for a real minimum length and steers away from textbook names", () => {
+    const prompt = buildPrompt(state({ level: 1 }), null, { genre: "Mystery", idea: "" });
+    expect(prompt).toContain("about 150 Finnish words");
+    expect(prompt).toContain("fewer than 128 is too short");
+    expect(prompt).toContain("Do not fall back on the names every textbook uses");
   });
 
   it("tells the writer how the previous chapter was received", () => {

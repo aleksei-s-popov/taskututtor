@@ -114,6 +114,8 @@ export interface Settings {
   /** listening: seconds of silence after each sentence; 0 = wait for the reader to tap next */
   listenGap: number;
   listenRate: number;
+  /** which generation of default models this install has been moved to */
+  modelDefaults?: number;
   /** illustrate each new chapter (needs an OpenRouter key) */
   illustrations: boolean;
   imageModel: string;
@@ -145,19 +147,19 @@ export function useStorage(key: string): void {
 
 /** Suggestions only — any OpenRouter model id can be typed in. */
 export const OR_MODELS = [
-  { id: "anthropic/claude-sonnet-5.5", label: "Claude Sonnet 5.5 — great stories, moderate price" },
-  { id: "anthropic/claude-opus-5.5", label: "Claude Opus 5.5 — best stories, pricier" },
-  { id: "google/gemini-4-carbon", label: "Gemini 4 Carbon" },
-  { id: "openai/gpt-6.2-sol", label: "GPT-6.2 Sol" },
-  { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5 — fastest, cheapest" },
+  { id: "openai/gpt-6.1-terra", label: "GPT-6.1 Terra — best stories for the price (default)" },
+  { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash — open weights, a third of the price" },
+  { id: "openai/gpt-6-luna", label: "GPT-6 Luna — cheapest, simpler plots" },
+  { id: "anthropic/claude-sonnet-5.5", label: "Claude Sonnet 5.5" },
+  { id: "anthropic/claude-opus-5.5", label: "Claude Opus 5.5 — priciest" },
 ];
 
 /** OpenRouter image models (suggestions only). */
 export const IMAGE_MODELS = [
-  { id: "google/gemini-nano-banana-2.1", label: "Gemini Nano Banana 2.1" },
-  { id: "google/gemini-3.1-flash-image", label: "Gemini 3.1 Flash Image" },
-  { id: "google/gemini-3-pro-image", label: "Gemini 3 Pro Image — best, pricier" },
-  { id: "openai/gpt-5.4-image-2", label: "GPT-5.4 Image 2" },
+  { id: "microsoft/mai-image-2.7-flash", label: "MAI Image 2.7 Flash — good and cheap (default)" },
+  { id: "google/gemini-nano-banana-2.1", label: "Gemini Nano Banana 2.1 — best, about 5× the price" },
+  { id: "google/gemini-3.1-flash-lite-image", label: "Gemini 3.1 Flash Lite Image" },
+  { id: "black-forest-labs/flux-3-image-klein", label: "Flux 3 Klein — cheapest" },
 ];
 
 export function activeKey(s: Settings): string {
@@ -188,6 +190,7 @@ function defaults(): State {
       listenRate: 0.85,
       illustrations: false,
       imageModel: IMAGE_MODELS[0].id,
+      modelDefaults: 2,
     },
     series: [],
     words: {},
@@ -202,6 +205,12 @@ export function load(): State {
     const saved = JSON.parse(raw) as Partial<State>;
     // Saved before providers existed: keep using the Anthropic key that was entered.
     const legacy: Partial<Settings> = saved.settings && !saved.settings.provider && saved.settings.apiKey ? { provider: "anthropic" } : {};
+    // Installs still on an earlier default model move to the current one (see docs/model-evaluation.md);
+    // a model the reader picked themselves is left alone.
+    const st = (saved.settings ?? {}) as Partial<Settings>;
+    if (st.orModel === "anthropic/claude-sonnet-5.5" && !st.modelDefaults) st.orModel = base.settings.orModel;
+    if (st.imageModel === "google/gemini-nano-banana-2.1" && !st.modelDefaults) st.imageModel = base.settings.imageModel;
+    st.modelDefaults = 2;
     return {
       settings: { ...base.settings, ...saved.settings, ...legacy },
       series: saved.series ?? [],

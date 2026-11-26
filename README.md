@@ -11,9 +11,11 @@ hard-to-put-down stories in Finnish at your level — and a little above it.
   words you looked up are woven back into later chapters until they stick.
 
 Stories are written by an AI model using **your own API key**. The default provider is
-[OpenRouter](https://openrouter.ai/keys) (default model `anthropic/claude-sonnet-5.5`; any OpenRouter
-model id works), and the Anthropic API can be used directly instead. The key, your stories and your
-progress are stored only in your browser; the key is sent only to the provider you chose.
+[OpenRouter](https://openrouter.ai/keys); the default models (`openai/gpt-6.1-terra` for stories,
+`microsoft/mai-image-2.7-flash` for pictures) were picked by testing — see
+[docs/model-evaluation.md](docs/model-evaluation.md) — and any OpenRouter model id works. The
+Anthropic API can be used directly instead. The key, your stories and your progress are stored only
+in your browser; the key is sent only to the provider you chose.
 
 ## Getting started
 

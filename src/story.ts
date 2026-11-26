@@ -52,7 +52,7 @@ function levelBrief(level: number): { words: number; brief: string } {
   };
 }
 
-/** Topic areas of the YKI intermediate test; chapters rotate through them. */
+/** Topic areas of the YKI intermediate test; a story's plan sets its events in them. */
 const YKI_THEMES = [
   "home and housing (renting, neighbours, repairs, the housing company)",
   "shopping and services (shops, prices, returning goods, post office, bank)",
@@ -87,10 +87,11 @@ Language:
 - Reuse new words several times within the chapter so they stick. "Still learning" words from earlier chapters are optional seasoning: use them only where the new events call for them, and never bend or stall the plot to fit them in.
 - Before you answer, proofread every Finnish sentence as a strict native editor: verb forms after the negative verb (ei naura, not "ei nauraa"), cases required by verbs and postpositions (oven takana, not "taakse ovea"), possessive suffixes (hänen jalkansa), object cases. Fix anything a native would not write.
 - Respect the target chapter length.
+- Words above the reader's level (long compounds, official terms) are allowed only when the situation truly needs them: at most a handful per chapter, each made guessable by its context and repeated.
 
 Output:
 - paragraphs: the chapter split into paragraphs, each a list of sentences. Each sentence has the Finnish text ("fi", with its punctuation and quotation marks) and a natural translation ("tr") in the reader's translation language. A line of dialogue with its speech tag is one sentence.
-- glossary: one entry for EVERY distinct word form that appears in the Finnish text (function words and names too). "form" is the word exactly as written in the text, lowercased, without surrounding punctuation; hyphenated compounds and forms like "EU:n" are a single form. "lemma" is the dictionary form. "tr" is a short translation of this form as used here, in the translation language. "note" is a very short grammar hint in the translation language (e.g. "inessive of talo", "past, 3rd sg of mennä") or "" when the form is already the dictionary form. "name" is true for proper names.
+- glossary: one entry for EVERY distinct word form that appears in the Finnish text (function words and names too). "form" is the word exactly as written in the text, lowercased, without surrounding punctuation; hyphenated compounds and forms like "EU:n" are a single form. "lemma" is the dictionary form. "tr" is a short translation of this form as used here, in the translation language. "note" is a very short grammar hint in the translation language (e.g. "inessive of talo", "past, 3rd sg of mennä"; call an -n object form "object form (genitive) of talo", and name the case that the form actually is in this sentence) or "" when the form is already the dictionary form. "name" is true for proper names.
 - story_so_far: the series canon in English (max 250 words), updated to include this chapter and written for yourself: who the characters are and what each wants, facts and rules established so far, where everyone is right now, which questions have been ANSWERED (with the answer) and which are still open. Drop atmosphere; keep facts.
 - chapter_recap: one English sentence (max 30 words) stating what concretely happened and changed in this chapter.
 - plan: the secret plot plan. When you are asked to create a plan, fill it in: "truth" = what is really going on and why (the answer to the central mystery; 2–4 sentences), "ending" = how the arc ends, "beats" = one entry per remaining chapter of the arc, in order, starting with the chapter you are writing now — each a concrete event that changes the situation, with its location; the last beat resolves the central conflict. When you are given an existing plan to follow, return empty strings and an empty beats list.
@@ -195,15 +196,14 @@ export function buildPrompt(state: PromptState, series: Series | null, req: NewS
   const lines: string[] = [
     `Reader's level: ${level.toFixed(2)} on a scale where 1.0 = A1, 2.0 = A2, 3.0 = B1, 4.0 = B2, 5.0 = C1 (≈ ${cefr(level)}).`,
     `Writing constraints for this level: ${lb.brief}`,
-    `Target chapter length: about ${lb.words} Finnish words.`,
+    `Target chapter length: about ${lb.words} Finnish words — count them before you answer; fewer than ${Math.round(lb.words * 0.85)} is too short.`,
     `Translation language: ${lang}.`,
   ];
   if (interests.trim()) lines.push(`Reader's interests: ${interests.trim()}`);
   if (state.settings.yki) {
-    const written = state.series.reduce((n, s) => n + s.chapters.length, 0);
     lines.push(
       `The reader's end goal is to pass the Finnish YKI test at intermediate level (keskitaso, B1). The story comes first, but it must also build what that test demands:`,
-      `- This chapter's YKI theme: ${YKI_THEMES[written % YKI_THEMES.length]}. Make it part of what the characters actually do in this chapter, with the real everyday vocabulary of that situation. In a fantastical or futuristic world use its equivalent (a clinic on a space station is still a clinic). Never lecture.`,
+      "- Use the real everyday vocabulary of whatever situation this chapter's event happens in (a shop, a clinic, an office, a workplace, a bus…). In a fantastical or futuristic world use its equivalent. Never add an errand, appointment or scene that the plot does not need just to cover a topic — a detour like that is a failed chapter.",
       "- Where it fits the plot, include one short everyday text of the kind used in YKI reading tasks — a text message, email, notice, advertisement, timetable, form, news item or official letter — written the way such texts really look in Finland, at the reader's level.",
       "- Narration in standard written Finnish (yleiskieli).",
       "- questions: exactly 3 multiple-choice comprehension questions about this chapter, in the style of the YKI reading test, in Finnish at the reader's level (very short and simple for beginners). They must test understanding of what happened or why — not word-spotting — and cover different parts of the chapter. Each has 3 short options in Finnish, exactly one correct; \"answer\" is its index (0–2), varied across questions; \"tr\" translates the question and its options into the translation language.",
@@ -306,6 +306,7 @@ export function buildPrompt(state: PromptState, series: Series | null, req: NewS
       `Start a brand-new series and write chapter 1. Genre: ${req.genre}.`,
       req.idea.trim() ? `The reader's idea for it: ${req.idea.trim()}` : "Invent a fresh, specific premise — avoid clichés.",
       "Set it somewhere that lets Finnish life and culture show through when that fits the genre.",
+      "Give the characters varied, real Finnish names drawn from the whole range in use today. Do not fall back on the names every textbook uses (Aino, Liisa, Matti, Pekka, Ville, Anna).",
       "Create the secret plan for a complete story of 9–12 chapters: the truth behind it, the ending, and one beat per chapter (beat 1 is this chapter). Vary locations and kinds of events across the beats; put a major reveal or reversal around the middle.",
     );
     if (state.series.length) {
@@ -316,6 +317,13 @@ export function buildPrompt(state: PromptState, series: Series | null, req: NewS
         used.length ? `Names of people and places from earlier series: ${used.join(", ")}. No character in the new story may have any of these names, and its main setting must be a different place.` : "",
       );
     }
+  }
+  // Whenever a new plan is being made for a YKI reader, the everyday topics go into the plot itself.
+  const planning = !series?.plan || series.chapters.length >= arcLength(series);
+  if (state.settings.yki && planning) {
+    lines.push(
+      `Planning for the YKI goal: set the plan's events inside everyday situations from the test's topic areas, so the plot itself happens there — the clue turns up at the pharmacy, the confrontation is at the housing-company meeting, the escape depends on a bus timetable. Each beat should say where it happens. Spread at least five different areas across the story: ${YKI_THEMES.join("; ")}.`,
+    );
   }
   return lines.filter((l, i) => l || i === lines.indexOf("")).join("\n");
 }

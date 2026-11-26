@@ -10,11 +10,12 @@ not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
 
 [vars]
-# Models (OpenRouter ids). The story model writes chapters; the lookup model answers
+# Models (OpenRouter ids), chosen by measurement: see docs/model-evaluation.md.
+# The story model writes chapters; the lookup model answers
 # single-word questions; the image model paints illustrations.
-STORY_MODEL = "anthropic/claude-sonnet-5.5"
+STORY_MODEL = "openai/gpt-6.1-terra"
 LOOKUP_MODEL = "anthropic/claude-haiku-5.5"
-IMAGE_MODEL = "google/gemini-nano-banana-2.1"
+IMAGE_MODEL = "microsoft/mai-image-2.7-flash"
 # New chapters one reader may request per day (UTC).
 DAILY_CHAPTER_LIMIT = "5"
 # Comma-separated web origins allowed to call this API, e.g. "https://app.example.com".
