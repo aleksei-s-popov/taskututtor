@@ -3,6 +3,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { cefr, learningWords } from "./adapt";
+import type { DictCard } from "./dict";
 import { formKey, tokenize, uid, type Chapter, type GlossEntry, type Series, type State } from "./store";
 
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
@@ -408,7 +409,7 @@ export async function lookupWord(state: State, word: string, sentence: string): 
     const json = await res.json().catch(() => null);
     text = String(json?.choices?.[0]?.message?.content ?? "");
   } else {
-    text = await anthropicLookup(state, question);
+    text = await anthropicLookup(state, question, LOOKUP_SCHEMA);
   }
   const g = parseJson<GlossEntry & { name: boolean }>(text);
   if (!g || !g.tr) throw new Error("Couldn't look that word up.");
@@ -417,11 +418,11 @@ export async function lookupWord(state: State, word: string, sentence: string): 
   return entry;
 }
 
-async function anthropicLookup(state: State, question: string): Promise<string> {
+async function anthropicLookup(state: State, question: string, schema: Record<string, unknown>): Promise<string> {
   const msg = await client(state).messages.create({
     model: state.settings.model,
     max_tokens: 16000,
-    output_config: { effort: "low", format: { type: "json_schema", schema: LOOKUP_SCHEMA } },
+    output_config: { effort: "low", format: { type: "json_schema", schema } },
     messages: [
       {
         role: "user",
@@ -501,4 +502,67 @@ export async function generateIllustration(state: State, series: Series, ch: Cha
     if (img?.ok) return blobToDataUrl(await img.blob());
   }
   throw new Error(json?.error?.message ? `Illustration failed: ${json.error.message}` : "The image model returned no picture. Try again or pick another image model in Settings.");
+}
+
+// ---------- dictionary card fallback (when Wiktionary has no entry) ----------
+
+const DICT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["entries"],
+  properties: {
+    entries: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["pos", "senses"],
+        properties: {
+          pos: { type: "string" },
+          senses: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["def", "examples"],
+              properties: {
+                def: { type: "string" },
+                examples: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["fi", "tr"],
+                    properties: { fi: { type: "string" }, tr: { type: "string" } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+/** Writes a dictionary entry with the story model, in the reader's translation language. */
+export async function aiDictionaryCard(state: State, lemma: string): Promise<DictCard> {
+  const lang = state.settings.lang;
+  const question = `Write a learner's dictionary entry for the Finnish word "${lemma}". Group by part of speech (pos, named in ${lang}). For each part of speech list its meanings from most to least common (at most 5): "def" is the meaning in ${lang}; "examples" has one or two short, natural Finnish example sentences ("fi") with their ${lang} translation ("tr"). If it is not a real Finnish word, return an empty entries list.`;
+  let text: string;
+  if (state.settings.provider === "openrouter") {
+    const res = await openRouterRequest(state, {
+      reasoning: { effort: "low" },
+      response_format: { type: "json_schema", json_schema: { name: "entry", strict: true, schema: DICT_SCHEMA } },
+      messages: [{ role: "user", content: question }],
+    });
+    const json = await res.json().catch(() => null);
+    text = String(json?.choices?.[0]?.message?.content ?? "");
+  } else {
+    text = await anthropicLookup(state, question, DICT_SCHEMA);
+  }
+  const parsed = parseJson<{ entries: DictCard["entries"] }>(text);
+  const entries = (parsed?.entries ?? []).filter((e) => e.senses?.length);
+  if (!entries.length) throw new Error("Couldn't write a dictionary entry for this word.");
+  return { lemma, source: "ai", entries };
 }

@@ -36,6 +36,10 @@ progress are stored only in your browser; the key is sent only to the provider y
 - **Finish a chapter:** at the end, say whether it was **Too easy**, **Just right** or **Too hard**.
   The app shows how many words you needed and how your level moved, then writes the next chapter
   to match.
+- **Dictionary card:** under the quick translation, each tapped word shows a dictionary card for its
+  base form — part of speech, meanings and example phrases — from [Wiktionary](https://en.wiktionary.org)
+  (free, no key; text is CC BY-SA, definitions are in English). Cards are saved on the device, so
+  words you've opened before work offline. If Wiktionary has no entry, you can have the AI write one.
 - **Illustrations (optional):** turn on **Illustrate every new chapter** in Settings to get one
   picture per chapter. They stay consistent across a series: the story model writes a fixed "art
   bible" (style and each character's look) that goes into every image prompt, and an earlier picture

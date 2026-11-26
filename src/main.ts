@@ -1,6 +1,7 @@
 import "./style.css";
 import { cefr, finishChapter, knownCount, learningWords, MAX_LEVEL, MIN_LEVEL, type ChapterResult } from "./adapt";
-import { friendlyError, generateChapter, generateIllustration, lookupWord, type NewSeriesRequest } from "./ai";
+import { aiDictionaryCard, friendlyError, generateChapter, generateIllustration, lookupWord, type NewSeriesRequest } from "./ai";
+import { cacheCard, cachedCard, wiktionaryCard, type DictCard } from "./dict";
 import { compress, deleteImage, getImage, putImage } from "./images";
 import { sampleSeries } from "./sample";
 import { activeKey, formKey, IMAGE_MODELS, load, MODELS, OR_MODELS, save, tokenize, uid, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
@@ -467,7 +468,85 @@ async function illustrate(series: Series, ch: Chapter): Promise<void> {
 
 // ---------- word sheet ----------
 
-let sheetCtx: { wordEl: HTMLElement; word: string; sid: string; sentence: { fi: string; tr: string } } | null = null;
+interface DictState {
+  lemma: string;
+  status: "loading" | "ok" | "none" | "error";
+  card?: DictCard;
+  message?: string;
+  /** show every meaning and example instead of the short version */
+  all: boolean;
+}
+
+let sheetCtx: { wordEl: HTMLElement; word: string; sid: string; sentence: { fi: string; tr: string }; dict?: DictState } | null = null;
+
+function dictHtml(): string {
+  const d = sheetCtx?.dict;
+  if (!d) return "";
+  if (d.status === "loading") return `<p class="note">Opening the dictionary…</p>`;
+  if (d.status === "error") return `<p class="note">${esc(d.message ?? "")}</p>`;
+  if (d.status === "none" || !d.card) {
+    return `<p class="note">No dictionary entry found for “${esc(d.lemma)}”.
+      ${activeKey(state.settings) ? `<button class="link" data-act="dict-ai">Write one with AI</button>` : ""}</p>`;
+  }
+  const card = d.card;
+  const total = card.entries.reduce((n, e) => n + e.senses.length, 0);
+  let budget = d.all ? Infinity : 3;
+  const body = card.entries
+    .map((e) => {
+      const senses = e.senses.slice(0, budget);
+      budget -= senses.length;
+      if (!senses.length) return "";
+      return `
+        <p class="pos">${esc(e.pos)}</p>
+        <ol>${senses
+          .map(
+            (s) => `<li>${esc(s.def)}${s.examples
+              .slice(0, d.all ? 4 : 1)
+              .map((x) => `<span class="ex"><i lang="fi">${esc(x.fi)}</i>${x.tr ? ` — ${esc(x.tr)}` : ""}</span>`)
+              .join("")}</li>`,
+          )
+          .join("")}</ol>`;
+    })
+    .join("");
+  const more = total > 3 || card.entries.some((e) => e.senses.some((s) => s.examples.length > 1));
+  return `
+    <section class="dict">
+      <p class="dict-head"><b lang="fi">${esc(card.lemma)}</b>
+        <button class="icon" data-act="speak" data-text="${esc(card.lemma)}" aria-label="Listen to the word">🔊</button></p>
+      ${body}
+      <p class="dict-foot">
+        ${more ? `<button class="link" data-act="dict-all">${d.all ? "Show less" : total > 3 ? `Show all ${total} meanings and examples` : "Show all examples"}</button>` : ""}
+        ${
+          card.source === "wiktionary"
+            ? `<a href="https://en.wiktionary.org/wiki/${encodeURIComponent(card.lemma)}#Finnish" target="_blank" rel="noopener">Wiktionary</a>`
+            : `<span>written by AI</span>`
+        }
+      </p>
+    </section>`;
+}
+
+function refreshDict(): void {
+  const el = document.getElementById("dict");
+  if (el) el.innerHTML = dictHtml();
+}
+
+/** Fills the open sheet's dictionary card: device cache first, then Wiktionary. */
+async function loadDict(lemma: string): Promise<void> {
+  const ctx = sheetCtx;
+  if (!ctx) return;
+  const cached = cachedCard(lemma);
+  ctx.dict = cached ? { lemma, status: "ok", card: cached, all: false } : { lemma, status: "loading", all: false };
+  refreshDict();
+  if (cached) return;
+  try {
+    const card = await wiktionaryCard(lemma);
+    if (card) cacheCard(card);
+    ctx.dict = card ? { lemma, status: "ok", card, all: false } : { lemma, status: "none", all: false };
+  } catch (e) {
+    ctx.dict = { lemma, status: "error", message: navigator.onLine ? friendlyError(e) : "The dictionary needs an internet connection.", all: false };
+  }
+  if (sheetCtx === ctx) refreshDict();
+}
 
 function closeSheet(): void {
   sheet.classList.remove("open");
@@ -494,6 +573,7 @@ function sheetHtml(word: string, g: GlossEntry | null, status: string, showSente
     </div>
     ${g ? `<p class="tr">${esc(g.tr)}</p>${g.note ? `<p class="note">${esc(g.note)}</p>` : ""}` : `<p class="note">${esc(status)}</p>`}
     ${showSentence ? `<p class="sent-tr">${esc(ctx.sentence.tr)}</p>` : ""}
+    <div id="dict">${dictHtml()}</div>
     <div class="sheet-actions">
       <button class="btn small" data-act="speak" data-text="${esc(ctx.sentence.fi)}">🔊 Listen</button>
       ${showSentence ? "" : `<button class="btn small" data-act="peek">Translate sentence</button>`}
@@ -534,7 +614,10 @@ async function openWord(el: HTMLElement): Promise<void> {
   }
   if (g) {
     recordLookup(ch, g);
-    if (!g.name) markLooked(ch, g.lemma);
+    if (!g.name) {
+      markLooked(ch, g.lemma);
+      void loadDict(g.lemma);
+    }
   }
 }
 
@@ -648,6 +731,31 @@ document.addEventListener("click", (ev) => {
     case "speak":
       speak(d.text ?? "");
       break;
+    case "dict-all":
+      if (sheetCtx?.dict) {
+        sheetCtx.dict.all = !sheetCtx.dict.all;
+        refreshDict();
+      }
+      break;
+    case "dict-ai": {
+      const ctx = sheetCtx;
+      if (!ctx?.dict) break;
+      const lemma = ctx.dict.lemma;
+      ctx.dict = { lemma, status: "loading", all: false };
+      refreshDict();
+      aiDictionaryCard(state, lemma)
+        .then((card) => {
+          cacheCard(card);
+          ctx.dict = { lemma, status: "ok", card, all: false };
+        })
+        .catch((e) => {
+          ctx.dict = { lemma, status: "error", message: friendlyError(e), all: false };
+        })
+        .finally(() => {
+          if (sheetCtx === ctx) refreshDict();
+        });
+      break;
+    }
     case "peek": {
       const ch = currentChapter();
       if (!ch || !sheetCtx) break;
