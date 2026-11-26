@@ -130,6 +130,13 @@ Fewer lookups or "too easy" nudges the level up; more lookups, many translated s
 "too hard" nudges it down (`src/adapt.ts`). The level, your still-learning words and your last
 feedback go into the prompt for the next chapter (`src/ai.ts`).
 
+## Brand and landing page
+
+- `public/icon.svg`, `public/mark.svg`, `public/logo.svg`: the icon (a pocket, *tasku*, with the two
+  dots of "ä" peeking over its edge), the same mark with rounded corners, and the mark with the name.
+- [`site/`](site): the static promo page, deployed to Cloudflare with `cd site && npx wrangler deploy`
+  (details in [`server/README.md`](server/README.md#landing-page)).
+
 ## License
 
 [Apache License 2.0](LICENSE)

@@ -15,6 +15,32 @@ It is one Cloudflare Worker:
 Sign-in is handled by [Clerk](https://clerk.com); the Worker only verifies the session token.
 Stories, lookups and pictures go through one [OpenRouter](https://openrouter.ai) key that you own.
 
+## How a chapter is made
+
+1. The app asks for a chapter; the Worker checks the reader's daily limit and puts a job on the queue.
+2. The queue consumer writes the **story** with `STORY_MODEL`, saves it and marks the job done.
+   From this moment the reader can open and read the chapter.
+3. It then writes the **word glossary** with the cheaper `GLOSSARY_MODEL`, from a list of the
+   chapter's word forms that the code computes, so every word gets an entry.
+4. If the reader has illustrations on, it paints the **picture** with `IMAGE_MODEL`, using an
+   earlier picture of the series as reference, and stores it in R2.
+
+Steps 3 and 4 reach the reader's devices through sync a few seconds later. If the glossary step
+fails twice, the chapter stays marked as waiting and the app asks for it again
+(`POST /api/chapters/:id/glossary`). The models were chosen by measurement:
+see [docs/model-evaluation.md](../docs/model-evaluation.md).
+
+## What gets deployed where
+
+| Deployment | Folder | Cloudflare name | What it is |
+|---|---|---|---|
+| App + API | `server/` | `taskututtor` | this Worker; also serves the web app's files |
+| Landing page | `site/` | `taskututtor-site` | static promo site, no code |
+
+The public personal-key version of the app is separate again: GitHub Pages builds it from the
+repository root on every push. A typical domain layout is the landing page on `example.com` and
+the app on `app.example.com`; set each under *Workers & Pages → the Worker → Settings → Domains*.
+
 ## Set up
 
 You need a Cloudflare account, a Clerk application and an OpenRouter key.
@@ -65,6 +91,28 @@ npx wrangler login
 | `IMAGE_MODEL` | model that paints illustrations |
 | `DAILY_CHAPTER_LIMIT` | new chapters one reader may request per day (UTC) |
 | `ALLOWED_ORIGINS` | comma-separated web origins that may call the API |
+
+## Landing page
+
+The promo site in [`site/`](../site) is plain HTML and CSS with no build step:
+
+```bash
+cd site
+npx wrangler deploy
+```
+
+Wrangler prints the address (`taskututtor-site.<your-subdomain>.workers.dev`). Before or after
+you attach your own domain:
+
+- **Links:** the page links to the app and to the source repository. Both addresses are listed in
+  a comment at the top of `site/public/index.html`; replace them when the app moves to your domain.
+- **Share image:** set `og:image` in `index.html` to a full address (`https://your-domain/img/og.png`);
+  social networks do not follow relative ones.
+- **Pricing:** the page says account pricing "will be announced". Edit the *Two ways to use it*
+  section when you have a price.
+
+The screenshots in `site/public/img/` are real app screens showing a chapter and an illustration
+produced during the model tests. Retake them after visible changes to the app.
 
 ## Backups
 

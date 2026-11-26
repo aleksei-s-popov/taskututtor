@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="116" fill="#23498f"/>
+  <g transform="translate(256 256) scale(1.16) translate(-256 -277)">
+    <!-- the two dots of the Finnish "ä", peeking over the pocket's edge like a pair of eyes -->
+    <circle cx="206" cy="166" r="31" fill="#f7f4ee"/>
+    <circle cx="306" cy="166" r="31" fill="#f7f4ee"/>
+    <!-- the pocket ("tasku") -->
+    <path d="M132 214h248v112c0 13-6 23-17 30l-90 57c-11 7-23 7-34 0l-90-57c-11-7-17-17-17-30z" fill="#f7f4ee"/>
+    <path d="M132 214h248v34H132z" fill="#e6dccb"/>
+    <path d="M154 268v56c0 7 3 12 9 16l84 53c6 4 12 4 18 0l84-53c6-4 9-9 9-16v-56" fill="none" stroke="#23498f" stroke-opacity=".38" stroke-width="7" stroke-linecap="round" stroke-dasharray="15 15"/>
+    <!-- a bookmark: there is a story in there -->
+    <path d="M318 214h36v92l-18-15-18 15z" fill="#e3a23a"/>
+  </g>
+</svg>

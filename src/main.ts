@@ -931,7 +931,7 @@ async function loadDict(lemma: string): Promise<void> {
     if (card) cacheCard(card);
     ctx.dict = card ? { lemma, status: "ok", card, all: false } : { lemma, status: "none", all: false };
   } catch (e) {
-    ctx.dict = { lemma, status: "error", message: navigator.onLine ? friendlyError(e) : "The dictionary needs an internet connection.", all: false };
+    ctx.dict = { lemma, status: "error", message: !navigator.onLine ? "The dictionary needs an internet connection." : e instanceof TypeError ? "The dictionary could not be reached right now." : friendlyError(e), all: false };
   }
   if (sheetCtx === ctx) refreshDict();
 }
