@@ -111,6 +111,9 @@ export interface Settings {
   /** preparing for the YKI intermediate test: everyday themes, real-life text types, comprehension questions */
   yki: boolean;
   fontSize: number;
+  /** listening: seconds of silence after each sentence; 0 = wait for the reader to tap next */
+  listenGap: number;
+  listenRate: number;
   /** illustrate each new chapter (needs an OpenRouter key) */
   illustrations: boolean;
   imageModel: string;
@@ -165,6 +168,8 @@ function defaults(): State {
       interests: "",
       yki: true,
       fontSize: 20,
+      listenGap: 0,
+      listenRate: 0.85,
       illustrations: false,
       imageModel: IMAGE_MODELS[0].id,
     },

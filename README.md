@@ -36,6 +36,10 @@ progress are stored only in your browser; the key is sent only to the provider y
   meaning, dictionary form and a short grammar hint. From that panel you can also
   **Translate sentence**, **Listen** to the sentence, or tap **I know this word** if you tapped by accident.
   Words you looked up stay underlined.
+- **Listen while you read:** tap **Listen sentence by sentence** above the text (or **Play from here**
+  after tapping a word). The sentence being read is highlighted. By default the player stops after
+  every sentence and waits for you — ▶ moves on, 🔁 repeats, ⏮ ⏭ step back and forward. You can
+  switch to automatic pauses of 2, 4 or 8 seconds and change the speed. Tapping a word pauses it.
 - **Finish a chapter:** at the end, say whether it was **Too easy**, **Just right** or **Too hard**.
   The app shows how many words you needed and how your level moved, then writes the next chapter
   to match.
@@ -83,7 +87,7 @@ at the YKI intermediate test (B1):
 - each chapter ends with three test-style multiple-choice comprehension questions in Finnish, and
   your score feeds into the difficulty adjustment;
 - the home screen shows a **Road to YKI** bar: progress from beginner to B1;
-- **Listen to the chapter** reads the whole text aloud for listening practice.
+- **Listen sentence by sentence** reads the text aloud at your pace for listening practice.
 
 The app trains reading, vocabulary and listening. YKI also tests writing and speaking, which it
 does not cover.

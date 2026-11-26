@@ -66,7 +66,7 @@ function toast(msg: string): void {
 
 function go(v: View): void {
   closeSheet();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  playerClose();
   view = v;
   render();
   window.scrollTo(0, 0);
@@ -469,12 +469,130 @@ function readerView(): string {
     <h2 class="chapter-title">${esc(ch.title)}</h2>
     <figure class="art" id="art">${artHtml(ch)}</figure>
     <p class="hint">Tap a word for its meaning. Try to guess first.
-      <button class="link" data-act="listen-all">🔊 Listen to the chapter</button></p>
+      <button class="link" data-act="player-open">🔊 Listen sentence by sentence</button></p>
     <article class="text">
       ${ch.paragraphs.map((p, pi) => `<p>${p.map((_, si) => sentenceHtml(ch, pi, si)).join("")}</p>`).join("")}
     </article>
     <section class="end" id="end">${endHtml(series, ch, idx)}</section>
   </main>`;
+}
+
+// ---------- sentence-by-sentence listening ----------
+
+const player = document.getElementById("player")! as HTMLElement & {
+  active?: boolean;
+  idx: number;
+  playing?: boolean;
+  /** the current sentence has been read out in full */
+  done?: boolean;
+  timer?: number;
+  /** bumped on every action so callbacks of cancelled speech are ignored */
+  run: number;
+};
+player.idx = 0;
+player.run = 0;
+
+const GAPS = [0, 2, 4, 8];
+const RATES = [0.7, 0.85, 1];
+
+/** Sentence ids ("paragraph.sentence") of a chapter in reading order. */
+function playerOrder(ch: Chapter): string[] {
+  return ch.paragraphs.flatMap((p, pi) => p.map((_, si) => `${pi}.${si}`));
+}
+
+function renderPlayer(): void {
+  const ch = currentChapter();
+  if (!player.active || !ch) {
+    player.classList.remove("open");
+    return;
+  }
+  const total = playerOrder(ch).length;
+  const gap = state.settings.listenGap;
+  player.innerHTML = `
+    <div class="player-main">
+      <button class="icon" data-act="player-prev" aria-label="Previous sentence" ${player.idx === 0 ? "disabled" : ""}>⏮</button>
+      <button class="icon" data-act="player-repeat" aria-label="Repeat sentence">🔁</button>
+      <button class="icon play" data-act="player-toggle" aria-label="${player.playing ? "Pause" : "Play"}">${player.playing ? "⏸" : "▶"}</button>
+      <button class="icon" data-act="player-next" aria-label="Next sentence" ${player.idx >= total - 1 ? "disabled" : ""}>⏭</button>
+      <button class="icon" data-act="player-close" aria-label="Close player">✕</button>
+    </div>
+    <div class="player-opts">
+      <small>${player.idx + 1} / ${total}</small>
+      <button class="link" data-act="player-gap">After each sentence: ${gap ? `wait ${gap} s` : "wait for me"}</button>
+      <button class="link" data-act="player-rate">Speed ${state.settings.listenRate}×</button>
+    </div>`;
+  player.classList.add("open");
+}
+
+function playerMark(ch: Chapter): void {
+  document.querySelector(".s.speaking")?.classList.remove("speaking");
+  const el = document.querySelector<HTMLElement>(`.s[data-sid="${playerOrder(ch)[player.idx]}"]`);
+  if (!el) return;
+  el.classList.add("speaking");
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+/** Reads sentence `idx` aloud, then waits (for a tap, or the chosen pause) before the next one. */
+function playerPlay(idx: number): void {
+  const ch = currentChapter();
+  if (!ch) return;
+  const order = playerOrder(ch);
+  clearTimeout(player.timer);
+  speechSynthesis.cancel();
+  const run = ++player.run;
+  if (idx >= order.length) {
+    // End of the chapter: keep the bar, stop on the last sentence.
+    player.playing = false;
+    player.done = true;
+    renderPlayer();
+    return;
+  }
+  player.active = true;
+  player.idx = Math.max(0, idx);
+  player.playing = true;
+  player.done = false;
+  const [pi, si] = order[player.idx].split(".").map(Number);
+  const u = new SpeechSynthesisUtterance(ch.paragraphs[pi][si].fi);
+  u.lang = "fi-FI";
+  u.rate = state.settings.listenRate;
+  u.onend = () => {
+    if (run !== player.run) return;
+    player.done = true;
+    const gap = state.settings.listenGap;
+    if (gap && player.idx < order.length - 1) {
+      player.timer = window.setTimeout(() => run === player.run && playerPlay(player.idx + 1), gap * 1000);
+    } else {
+      player.playing = false;
+      renderPlayer();
+    }
+  };
+  u.onerror = () => {
+    if (run !== player.run) return;
+    player.playing = false;
+    renderPlayer();
+  };
+  playerMark(ch);
+  renderPlayer();
+  speechSynthesis.speak(u);
+}
+
+function playerPause(): void {
+  clearTimeout(player.timer);
+  player.run++;
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  player.playing = false;
+  renderPlayer();
+}
+
+function playerClose(): void {
+  clearTimeout(player.timer);
+  player.run++;
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  player.active = false;
+  player.playing = false;
+  player.idx = 0;
+  document.querySelector(".s.speaking")?.classList.remove("speaking");
+  renderPlayer();
 }
 
 // ---------- illustrations ----------
@@ -648,12 +766,14 @@ function sheetHtml(word: string, g: GlossEntry | null, status: string, showSente
     <div id="dict">${dictHtml()}</div>
     <div class="sheet-actions">
       <button class="btn small" data-act="speak" data-text="${esc(ctx.sentence.fi)}">🔊 Listen</button>
+      <button class="btn small" data-act="player-open">▶ Play from here</button>
       ${showSentence ? "" : `<button class="btn small" data-act="peek">Translate sentence</button>`}
       ${g && !g.name ? `<button class="btn small" data-act="know">I know this word</button>` : ""}
     </div>`;
 }
 
 async function openWord(el: HTMLElement): Promise<void> {
+  if (player.playing) playerPause(); // give the reader time to look the word up
   const ch = currentChapter();
   const sEl = el.closest<HTMLElement>(".s");
   if (!ch || !sEl) return;
@@ -816,30 +936,49 @@ document.addEventListener("click", (ev) => {
       document.getElementById("end")!.innerHTML = endHtml(series, ch, view.idx);
       break;
     }
-    case "listen-all": {
+    case "player-open": {
       const ch = currentChapter();
       if (!ch) break;
       if (!("speechSynthesis" in window)) {
         toast("This browser can't read text aloud.");
         break;
       }
-      if (speechSynthesis.speaking) {
-        speechSynthesis.cancel();
-        el.textContent = "🔊 Listen to the chapter";
-        break;
-      }
-      // One utterance per sentence: long texts get cut off on Android.
-      const sentences = ch.paragraphs.flat();
-      sentences.forEach((sen, i) => {
-        const u = new SpeechSynthesisUtterance(sen.fi);
-        u.lang = "fi-FI";
-        u.rate = 0.85;
-        if (i === sentences.length - 1) u.onend = () => (el.textContent = "🔊 Listen to the chapter");
-        speechSynthesis.speak(u);
-      });
-      el.textContent = "⏹ Stop listening";
+      // Start from the sentence of the open word, if there is one.
+      const from = sheetCtx ? playerOrder(ch).indexOf(sheetCtx.sid) : -1;
+      closeSheet();
+      playerPlay(from >= 0 ? from : player.active ? player.idx : 0);
       break;
     }
+    case "player-toggle":
+      if (player.playing) playerPause();
+      else playerPlay(player.done ? player.idx + 1 : player.idx);
+      break;
+    case "player-prev":
+      playerPlay(player.idx - 1);
+      break;
+    case "player-next":
+      playerPlay(player.idx + 1);
+      break;
+    case "player-repeat":
+      playerPlay(player.idx);
+      break;
+    case "player-gap": {
+      const i = GAPS.indexOf(state.settings.listenGap);
+      state.settings.listenGap = GAPS[(i + 1) % GAPS.length];
+      persist();
+      renderPlayer();
+      break;
+    }
+    case "player-rate": {
+      const i = RATES.indexOf(state.settings.listenRate);
+      state.settings.listenRate = RATES[(i + 1) % RATES.length];
+      persist();
+      renderPlayer();
+      break;
+    }
+    case "player-close":
+      playerClose();
+      break;
     case "speak":
       speak(d.text ?? "");
       break;
