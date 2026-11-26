@@ -78,7 +78,12 @@ answer "Too hard". Be honest with the feedback buttons; they are the strongest s
 npm install
 npm run dev      # local dev server
 npm run build    # type-check and build to dist/
+npm test         # unit tests for the adaptation and story logic
 ```
+
+The server has its own tests (`cd server && npm test`): they start a real local Worker against a
+fake AI service. Both suites run in CI on every push, and the site is only deployed when the app's
+tests pass.
 
 ## Deploy
 

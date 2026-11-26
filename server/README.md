@@ -31,6 +31,7 @@ npx wrangler login
    ```bash
    npx wrangler d1 create taskututtor
    npx wrangler r2 bucket create taskututtor-images
+   npx wrangler r2 bucket create taskututtor-backups
    npx wrangler queues create taskututtor-jobs
    npm run db:remote
    ```
@@ -63,6 +64,31 @@ npx wrangler login
 | `IMAGE_MODEL` | model that paints illustrations |
 | `DAILY_CHAPTER_LIMIT` | new chapters one reader may request per day (UTC) |
 | `ALLOWED_ORIGINS` | comma-separated web origins that may call the API |
+
+## Backups
+
+Two layers protect the database:
+
+- **D1 Time Travel** (built in, always on): restore the database to any minute in the recent
+  past with `npx wrangler d1 time-travel restore taskututtor --timestamp=<when>`.
+- **Weekly export** (this repo): every Monday at 03:17 UTC the Worker writes the whole database
+  as a gzipped SQL file to the `taskututtor-backups` bucket and keeps the newest `BACKUP_KEEP`
+  files. To restore one:
+
+  ```bash
+  npx wrangler r2 object get taskututtor-backups/db/<file>.sql.gz --file backup.sql.gz
+  gunzip backup.sql.gz
+  npx wrangler d1 execute taskututtor --remote --file backup.sql
+  ```
+
+  Rows are written with `INSERT OR REPLACE`, so restoring over a live database brings exported
+  rows back without touching rows created since.
+
+The exports stay inside your Cloudflare account. For a copy that survives losing the account,
+download a file with the first command above now and then and keep it elsewhere. They contain
+readers' stories and progress, so do not put them anywhere public (including CI artifacts of a
+public repository). Illustrations are not exported: R2 already stores them redundantly and
+they can be regenerated.
 
 ## Run locally
 

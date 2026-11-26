@@ -23,6 +23,7 @@ import {
   type ChapterPayload,
   type PromptState,
 } from "../../src/story";
+import { runBackup } from "./backup";
 import type { Env, QueueBatch } from "./bindings";
 
 /** What a reader's profile document holds. Everything else lives in series and chapters. */
@@ -405,6 +406,12 @@ export default {
     const out = new Response(res.body, res);
     for (const [k, v] of Object.entries(headers)) out.headers.set(k, v);
     return out;
+  },
+
+  /** Cron trigger (see wrangler.toml): the weekly database export. */
+  async scheduled(_event: unknown, env: Env): Promise<void> {
+    const done = await runBackup(env);
+    console.log(`backup written: ${done.key} (${done.rows} rows, ${done.bytes} bytes)`);
   },
 
   async queue(batch: QueueBatch, env: Env): Promise<void> {

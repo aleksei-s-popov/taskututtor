@@ -10,13 +10,15 @@
     "deploy": "npm run build:web && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "db:local": "wrangler d1 execute taskututtor --local --file=schema.sql",
-    "db:remote": "wrangler d1 execute taskututtor --remote --file=schema.sql"
+    "db:remote": "wrangler d1 execute taskututtor --remote --file=schema.sql",
+    "test": "vitest run"
   },
   "dependencies": {
     "@clerk/backend": "^3.33.1"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
+    "vitest": "^5.1.2",
     "wrangler": "^4.168.0"
   }
 }

@@ -24,6 +24,7 @@ export interface R2 {
   put(key: string, value: ArrayBuffer | Uint8Array, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
   get(key: string): Promise<R2Object | null>;
   delete(keys: string | string[]): Promise<void>;
+  list(options?: { prefix?: string }): Promise<{ objects: { key: string }[] }>;
 }
 
 export interface JobQueue {
@@ -37,6 +38,8 @@ export interface QueueBatch {
 export interface Env {
   DB: D1;
   IMAGES: R2;
+  /** Separate bucket for database exports, so they survive anything that happens to the live data. */
+  BACKUPS: R2;
   JOBS: JobQueue;
   OPENROUTER_API_KEY: string;
   CLERK_JWT_KEY?: string;
@@ -45,6 +48,8 @@ export interface Env {
   IMAGE_MODEL: string;
   DAILY_CHAPTER_LIMIT: string;
   ALLOWED_ORIGINS: string;
+  /** How many weekly database exports to keep. */
+  BACKUP_KEEP?: string;
   /** Local development only: accept "Bearer dev:<user id>" instead of a Clerk token. */
   DEV_AUTH?: string;
   /** Override for tests; defaults to https://openrouter.ai/api/v1 */

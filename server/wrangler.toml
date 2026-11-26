@@ -19,6 +19,8 @@ IMAGE_MODEL = "google/gemini-nano-banana-2.1"
 DAILY_CHAPTER_LIMIT = "5"
 # Comma-separated web origins allowed to call this API, e.g. "https://app.example.com".
 ALLOWED_ORIGINS = "*"
+# Weekly database exports to keep (12 = about three months).
+BACKUP_KEEP = "12"
 
 # Secrets — set with `wrangler secret put NAME`, never in this file:
 #   OPENROUTER_API_KEY   key that pays for generation
@@ -32,6 +34,14 @@ database_id = "REPLACE_WITH_D1_DATABASE_ID"
 [[r2_buckets]]
 binding = "IMAGES"
 bucket_name = "taskututtor-images"
+
+# Weekly database export (Mondays 03:17 UTC) — see src/backup.ts.
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "taskututtor-backups"
+
+[triggers]
+crons = ["17 3 * * 1"]
 
 [[queues.producers]]
 binding = "JOBS"
