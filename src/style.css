@@ -981,3 +981,21 @@ body:has(#player.open) .page {
     animation-duration: 3s !important;
   }
 }
+
+/* series cover on the home screen: the story's first illustration */
+
+.cover {
+  margin: -14px -16px 8px;
+  aspect-ratio: 2 / 1;
+  background: var(--tint);
+  border-radius: calc(var(--r) - 1px) calc(var(--r) - 1px) 0 0;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

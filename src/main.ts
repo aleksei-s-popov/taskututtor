@@ -102,6 +102,7 @@ function render(): void {
       break;
     case "library":
       app.innerHTML = libraryView();
+      void loadCovers();
       break;
     case "new":
       app.innerHTML = newSeriesView();
@@ -216,8 +217,10 @@ function libraryView(): string {
       const done = s.chapters.filter((c) => c.finished).length;
       const next = Math.min(done, s.chapters.length - 1);
       const allRead = done === s.chapters.length;
+      const cover = s.chapters.find((c) => c.hasImage);
       return `
       <article class="card">
+        ${cover ? `<div class="cover" data-cover="${cover.id}" data-act="open" data-id="${s.id}" data-idx="${next}"></div>` : ""}
         <div class="card-top">
           <span class="tag">${s.sample ? "Sample · " : ""}${esc(s.genre)}</span>
           <button class="icon" data-act="delete-series" data-id="${s.id}" aria-label="Delete series">${icon("trash", 18)}</button>
@@ -618,6 +621,23 @@ function artHtml(ch: Chapter): string {
   if (ch.hasImage) return `<div class="art-wait"></div>`; // still loading from storage
   if (!state.settings.illustrations) return "";
   return `<button class="btn small" data-act="illustrate">${icon("image", 18)} Illustrate this chapter</button>`;
+}
+
+/** Fills the series cards on the home screen with their first illustration. */
+async function loadCovers(): Promise<void> {
+  for (const el of document.querySelectorAll<HTMLElement>("[data-cover]")) {
+    const id = el.dataset.cover!;
+    const url = artCache.get(id) ?? (await getImage(id));
+    if (!url) {
+      el.remove(); // the picture is gone (e.g. browser storage was cleared)
+      continue;
+    }
+    artCache.set(id, url);
+    const img = new Image();
+    img.alt = "";
+    img.src = url;
+    el.replaceChildren(img);
+  }
 }
 
 function refreshArt(ch: Chapter): void {
