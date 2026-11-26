@@ -7,7 +7,8 @@ import { aiDictionaryCard, friendlyError, generateChapter, generateIllustration,
 import { cacheCard, cachedCard, wiktionaryCard, type DictCard } from "./dict";
 import { compress, deleteImage, getImage, putImage } from "./images";
 import { sampleSeries } from "./sample";
-import { activeKey, arcLength, formKey, seriesNames, IMAGE_MODELS, load, MODELS, OR_MODELS, save, tokenize, uid, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
+import { applyChapter } from "./story";
+import { activeKey, arcLength, formKey, seriesNames, IMAGE_MODELS, load, MODELS, OR_MODELS, save, tokenize, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
 
 type View =
   | { name: "onboard" }
@@ -874,31 +875,8 @@ async function writeChapter(series: Series | null, req: NewSeriesRequest | null)
 
   try {
     const { chapter, payload } = await gen.promise;
-    let target = series;
-    if (target) {
-      target.chapters.push(chapter);
-      target.storySoFar = payload.story_so_far;
-      if (payload.art_bible) target.artBible = payload.art_bible;
-      // A new plan is only accepted when one was asked for: no plan yet, or the arc is over.
-      const beats = (payload.plan?.beats ?? []).filter((b) => b.trim());
-      if (beats.length && (!target.plan || target.chapters.length > arcLength(target))) {
-        target.plan = { truth: payload.plan.truth, ending: payload.plan.ending, beats, start: target.chapters.length - 1 };
-      }
-    } else {
-      target = {
-        id: uid(),
-        title: payload.series_title,
-        premise: payload.series_premise,
-        genre: req?.genre ?? "Story",
-        basedOn: req?.from?.id,
-        storySoFar: payload.story_so_far,
-        artBible: payload.art_bible || undefined,
-        plan: payload.plan?.beats?.length ? { truth: payload.plan.truth, ending: payload.plan.ending, beats: payload.plan.beats, start: 0 } : undefined,
-        chapters: [chapter],
-        createdAt: Date.now(),
-      };
-      state.series.unshift(target);
-    }
+    const target = applyChapter(series, chapter, payload, req);
+    if (!series) state.series.unshift(target);
     persist();
     go({ name: "reader", seriesId: target.id, idx: target.chapters.length - 1 });
     if (state.settings.illustrations && state.settings.orKey) void illustrate(target, chapter);

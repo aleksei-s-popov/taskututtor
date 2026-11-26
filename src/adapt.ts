@@ -102,7 +102,7 @@ export function finishChapter(state: State, ch: Chapter, feedback: Feedback): Ch
 }
 
 /** Words the reader is still learning: looked up and not yet known. Most recent first. */
-export function learningWords(state: State): [string, State["words"][string]][] {
+export function learningWords(state: Pick<State, "words">): [string, State["words"][string]][] {
   return Object.entries(state.words)
     .filter(([, w]) => w.lookups > 0 && !w.known)
     .sort((a, b) => b[1].lastSeen - a[1].lastSeen);

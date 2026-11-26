@@ -1,0 +1,36 @@
+name = "taskututtor"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+[vars]
+# Models (OpenRouter ids). The story model writes chapters; the lookup model answers
+# single-word questions; the image model paints illustrations.
+STORY_MODEL = "anthropic/claude-sonnet-5.5"
+LOOKUP_MODEL = "anthropic/claude-haiku-5.5"
+IMAGE_MODEL = "google/gemini-nano-banana-2.1"
+# New chapters one reader may request per day (UTC).
+DAILY_CHAPTER_LIMIT = "5"
+# Comma-separated web origins allowed to call this API, e.g. "https://app.example.com".
+ALLOWED_ORIGINS = "*"
+
+# Secrets — set with `wrangler secret put NAME`, never in this file:
+#   OPENROUTER_API_KEY   key that pays for generation
+#   CLERK_JWT_KEY        Clerk "JWKS public key" (PEM), used to verify sign-in tokens
+
+[[d1_databases]]
+binding = "DB"
+database_name = "taskututtor"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "taskututtor-images"
+
+[[queues.producers]]
+binding = "JOBS"
+queue = "taskututtor-jobs"
+
+[[queues.consumers]]
+queue = "taskututtor-jobs"
+max_batch_size = 1
+max_retries = 1

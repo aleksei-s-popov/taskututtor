@@ -1,0 +1,21 @@
+{
+  "name": "taskututtor-server",
+  "private": true,
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:local": "wrangler d1 execute taskututtor --local --file=schema.sql",
+    "db:remote": "wrangler d1 execute taskututtor --remote --file=schema.sql"
+  },
+  "dependencies": {
+    "@clerk/backend": "^3.33.1"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "wrangler": "^4.168.0"
+  }
+}
