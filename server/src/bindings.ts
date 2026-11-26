@@ -51,6 +51,11 @@ export interface Env {
   ALLOWED_ORIGINS: string;
   /** How many weekly database exports to keep. */
   BACKUP_KEEP?: string;
+  /** PostHog project token and host for usage, cost and failure events. Analytics is off without a token. */
+  POSTHOG_KEY?: string;
+  POSTHOG_HOST?: string;
+  /** Keeps the Worker alive until a background send has finished (set per request). */
+  wait?: (work: Promise<unknown>) => void;
   /** Local development only: accept "Bearer dev:<user id>" instead of a Clerk token. */
   DEV_AUTH?: string;
   /** Override for tests; defaults to https://openrouter.ai/api/v1 */

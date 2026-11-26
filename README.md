@@ -82,6 +82,9 @@ The same code produces two different products, and they never mix.
 | Where it runs | GitHub Pages, rebuilt on every push | Cloudflare, deployed by hand from [`server/`](server/README.md) |
 | How it is built | `npm run build` | `npm run build` with `VITE_API_URL` and `VITE_CLERK_PUBLISHABLE_KEY` set |
 
+The open-source build contains no analytics. Production can report usage, AI cost and errors to
+PostHog (off unless a key is configured; see [`server/README.md`](server/README.md#analytics-posthog)).
+
 New work shows up in the open-source build first; production gets it when you deploy. The promo
 page in [`site/`](site) is published with the production build and links only to it.
 

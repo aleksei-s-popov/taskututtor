@@ -79,7 +79,8 @@ npx wrangler login
    npx wrangler secret put CLERK_JWT_KEY
    ```
 
-4. Deploy. The publishable key is public and is baked into the web app at build time:
+4. Deploy. The publishable key is public and is baked into the web app at build time (add
+   `VITE_POSTHOG_KEY=phc_...` to the same command if you use analytics, see below):
 
    ```bash
    VITE_CLERK_PUBLISHABLE_KEY=pk_live_... npm run deploy
@@ -100,6 +101,44 @@ npx wrangler login
 | `IMAGE_MODEL` | model that paints illustrations |
 | `DAILY_CHAPTER_LIMIT` | new chapters one reader may request per day (UTC) |
 | `ALLOWED_ORIGINS` | comma-separated web origins that may call the API |
+| `POSTHOG_KEY`, `POSTHOG_HOST` | analytics project token and region; empty key = analytics off |
+
+## Analytics (PostHog)
+
+Optional, and production only: the open-source build contains no tracking and sends nothing.
+
+To switch it on, create a PostHog project for Taskututtor (EU region), copy its project token
+(`phc_...`, public by design) and use it in two places:
+
+- `POSTHOG_KEY` in `wrangler.toml`, for events from the server;
+- `VITE_POSTHOG_KEY=phc_...` on the deploy command, for events from the app.
+
+Set `POSTHOG_HOST` / `VITE_POSTHOG_HOST` only if your project is not on `https://eu.i.posthog.com`.
+
+| Event | From | Tells you |
+|---|---|---|
+| `signed_in`, `signed_out`, `waitlist_opened` | app | who gets in and who is waiting |
+| `onboarding_completed` | app | starting level, YKI goal |
+| `screen_viewed` | app | which screens are used |
+| `chapter_requested`, `chapter_ready`, `chapter_request_failed` | app | demand, and how long readers wait |
+| `chapter_finished` | app | feedback, words looked up, question score, level change: the core learning loop |
+| `listening_started`, `illustration_requested` | app | feature use |
+| errors (`$exception`) | app | crashes, with the screen they happened on |
+| `$ai_generation` | server | every AI call: model, tokens, cost in USD, latency, per reader (PostHog's LLM analytics) |
+| `chapter_generated`, `chapter_generation_failed` | server | what was written and what failed, by stage |
+| `daily_limit_reached`, `server_error` | server | readers hitting the cap; unexpected failures |
+
+Useful first views: a funnel from `signed_in` to the third `chapter_finished`; retention on
+`chapter_finished`; cost per reader as the sum of `$ai_total_cost_usd` by person.
+
+What is deliberately not collected: story text, prompts, looked-up words, anything a reader
+types, email addresses (readers appear under their Clerk account id), session recordings, and
+clicks in general (autocapture is off). Nothing is stored on the reader's device for analytics,
+so there is no analytics cookie. You still need a privacy notice that says usage data is
+collected: a starting point is in [docs/privacy-draft.md](../docs/privacy-draft.md).
+
+Automated browsers are ignored by PostHog; end-to-end tests that need to see their own events
+build the app with `VITE_POSTHOG_COUNT_BOTS=1`.
 
 ## Landing page
 

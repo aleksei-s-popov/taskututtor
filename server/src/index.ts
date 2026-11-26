@@ -29,6 +29,7 @@ import {
 } from "../../src/story";
 import { runBackup } from "./backup";
 import type { Env, QueueBatch } from "./bindings";
+import { capture, captureGeneration } from "./telemetry";
 
 /** What a reader's profile document holds. Everything else lives in series and chapters. */
 interface Profile {
@@ -118,24 +119,46 @@ const imageKey = (user: string, chapterId: string) => `${user}/${chapterId}`;
 
 // ---------- OpenRouter ----------
 
-async function openRouter(env: Env, path: string, body: Record<string, unknown>): Promise<any> {
-  const res = await fetch(`${env.OPENROUTER_BASE ?? "https://openrouter.ai/api/v1"}${path}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.OPENROUTER_API_KEY}`, "Content-Type": "application/json", "X-Title": "Taskututtor" },
-    body: JSON.stringify(body),
-  });
-  const json = (await res.json().catch(() => null)) as any;
-  if (!res.ok || json?.error) throw new Error(`The AI service failed (${res.status})${json?.error?.message ? `: ${json.error.message}` : ""}`);
-  return json;
+/** Who an AI call is for and what it does; used for cost tracking only. */
+interface Purpose {
+  user: string;
+  kind: "story" | "glossary" | "illustration" | "lookup" | "dictionary";
 }
 
-async function askJson(env: Env, model: string, name: string, schema: Record<string, unknown>, question: string, system?: string): Promise<string> {
-  const json = await openRouter(env, "/chat/completions", {
-    model,
-    reasoning: { effort: "low" },
-    response_format: { type: "json_schema", json_schema: { name, strict: true, schema } },
-    messages: [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: question }],
-  });
+async function openRouter(env: Env, path: string, body: Record<string, unknown>, purpose: Purpose): Promise<any> {
+  const started = Date.now();
+  const model = String(body.model);
+  let status = 0;
+  try {
+    const res = await fetch(`${env.OPENROUTER_BASE ?? "https://openrouter.ai/api/v1"}${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.OPENROUTER_API_KEY}`, "Content-Type": "application/json", "X-Title": "Taskututtor" },
+      // Ask OpenRouter to report what the call cost.
+      body: JSON.stringify(path === "/images" ? body : { ...body, usage: { include: true } }),
+    });
+    status = res.status;
+    const json = (await res.json().catch(() => null)) as any;
+    if (!res.ok || json?.error) throw new Error(`The AI service failed (${res.status})${json?.error?.message ? `: ${json.error.message}` : ""}`);
+    captureGeneration(env, purpose.user, purpose.kind, model, started, { usage: json?.usage, status });
+    return json;
+  } catch (e) {
+    captureGeneration(env, purpose.user, purpose.kind, model, started, { status, error: e instanceof Error ? e.message : String(e) });
+    throw e;
+  }
+}
+
+async function askJson(env: Env, purpose: Purpose, model: string, name: string, schema: Record<string, unknown>, question: string, system?: string): Promise<string> {
+  const json = await openRouter(
+    env,
+    "/chat/completions",
+    {
+      model,
+      reasoning: { effort: "low" },
+      response_format: { type: "json_schema", json_schema: { name, strict: true, schema } },
+      messages: [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: question }],
+    },
+    purpose,
+  );
   return String(json?.choices?.[0]?.message?.content ?? "");
 }
 
@@ -160,7 +183,7 @@ async function illustrate(env: Env, user: string, series: Series, ch: Chapter): 
   }
   const body: Record<string, unknown> = { model: env.IMAGE_MODEL, prompt: illustrationPrompt(series, ch, !!reference), aspect_ratio: "3:2", n: 1 };
   if (reference) body.input_references = [{ type: "image_url", image_url: { url: reference } }];
-  const json = await openRouter(env, "/images", body);
+  const json = await openRouter(env, "/images", body, { user, kind: "illustration" });
   const item = json?.data?.[0];
   let bytes: Uint8Array | null = null;
   let type = "image/png";
@@ -206,7 +229,10 @@ async function writeChapter(env: Env, user: string, input: JobInput): Promise<Wr
   if (input.seriesId && !existing) throw new Error("That series no longer exists.");
   const req = existing ? null : { genre: input.genre || "Surprise me", idea: input.idea ?? "", from: library.find((s) => s.id === input.fromSeriesId) };
 
-  const json = await openRouter(env, "/chat/completions", {
+  const json = await openRouter(
+    env,
+    "/chat/completions",
+    {
     model: env.STORY_MODEL,
     reasoning: { effort: "medium" },
     response_format: { type: "json_schema", json_schema: { name: "chapter", strict: true, schema: CHAPTER_SCHEMA } },
@@ -214,7 +240,9 @@ async function writeChapter(env: Env, user: string, input: JobInput): Promise<Wr
       { role: "system", content: SYSTEM },
       { role: "user", content: buildPrompt(state, existing ?? null, req) },
     ],
-  });
+    },
+    { user, kind: "story" },
+  );
   const choice = json?.choices?.[0];
   if (choice?.finish_reason === "length") throw new Error("The chapter came out too long and was cut off. Please try again.");
   const payload = parseJson<ChapterPayload>(String(choice?.message?.content ?? ""));
@@ -251,7 +279,7 @@ async function writeChapter(env: Env, user: string, input: JobInput): Promise<Wr
 async function writeGlossary(env: Env, user: string, chapter: Chapter, lang: string): Promise<boolean> {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const answer = await askJson(env, env.GLOSSARY_MODEL, "glossary", GLOSSARY_SCHEMA, glossaryPrompt(chapter, lang), GLOSSARY_SYSTEM);
+      const answer = await askJson(env, { user, kind: "glossary" }, env.GLOSSARY_MODEL, "glossary", GLOSSARY_SCHEMA, glossaryPrompt(chapter, lang), GLOSSARY_SYSTEM);
       if (!applyGlossary(chapter, answer)) continue;
       await env.DB.prepare(
         "UPDATE chapters SET data = json_set(data, '$.glossary', json_patch(json(?), json_extract(data, '$.glossary')), '$.glossaryPending', json('false')), updated_at = ? WHERE id = ? AND user_id = ?",
@@ -263,6 +291,7 @@ async function writeGlossary(env: Env, user: string, chapter: Chapter, lang: str
       console.log("glossary failed", e instanceof Error ? e.message : e);
     }
   }
+  capture(env, user, "chapter_generation_failed", { stage: "glossary" });
   return false;
 }
 
@@ -278,6 +307,7 @@ async function finishChapter(env: Env, user: string, made: Written): Promise<voi
     }
   } catch (e) {
     console.log("illustration failed", e instanceof Error ? e.message : e);
+    capture(env, user, "chapter_generation_failed", { stage: "illustration", error: (e instanceof Error ? e.message : String(e)).slice(0, 200) });
   }
 }
 
@@ -289,13 +319,22 @@ async function runJob(env: Env, jobId: string): Promise<void> {
       .bind(status, extra.error ?? null, extra.seriesId ?? null, extra.chapterId ?? null, Date.now(), jobId)
       .run();
   await set("running");
+  const started = Date.now();
   try {
     const made = await writeChapter(env, job.user_id, JSON.parse(job.input) as JobInput);
     // The job is done as soon as the story can be read; the rest arrives through sync.
     await set("done", { seriesId: made.seriesId, chapterId: made.chapterId });
+    capture(env, job.user_id, "chapter_generated", {
+      seconds: Math.round((Date.now() - started) / 1000),
+      chapter_number: made.series.chapters.length,
+      level: made.chapter.level,
+      illustrated: made.illustrations,
+    });
     await finishChapter(env, job.user_id, made);
   } catch (e) {
-    await set("error", { error: e instanceof Error ? e.message : "Something went wrong while writing the chapter." });
+    const error = e instanceof Error ? e.message : "Something went wrong while writing the chapter.";
+    await set("error", { error });
+    capture(env, job.user_id, "chapter_generation_failed", { stage: "story", error: error.slice(0, 200), seconds: Math.round((Date.now() - started) / 1000) });
   }
 }
 
@@ -311,6 +350,7 @@ async function enqueue(env: Env, user: string, input: JobInput): Promise<Respons
   ]);
   // One chapter at a time: asking again while one is being written returns the same job.
   if (pending) return Response.json({ jobId: pending.id });
+  if ((written?.n ?? 0) >= limit) capture(env, user, "daily_limit_reached", { limit });
   if ((written?.n ?? 0) >= limit) throw new HttpError(429, `You've reached today's limit of ${limit} new chapters. More tomorrow!`);
 
   const jobId = id();
@@ -432,7 +472,7 @@ async function route(req: Request, env: Env): Promise<Response> {
     const word = String(b.word ?? "").slice(0, 80);
     if (!word) throw new HttpError(400, "No word given.");
     const profile = await loadProfile(env, user);
-    const text = await askJson(env, env.LOOKUP_MODEL, "word", LOOKUP_SCHEMA, lookupQuestion(profile.data.lang, word, String(b.sentence ?? "").slice(0, 500)));
+    const text = await askJson(env, { user, kind: "lookup" }, env.LOOKUP_MODEL, "word", LOOKUP_SCHEMA, lookupQuestion(profile.data.lang, word, String(b.sentence ?? "").slice(0, 500)));
     return Response.json(parseLookup(text, word));
   }
 
@@ -440,14 +480,15 @@ async function route(req: Request, env: Env): Promise<Response> {
     const lemma = String((await body<{ lemma?: string }>()).lemma ?? "").slice(0, 80);
     if (!lemma) throw new HttpError(400, "No word given.");
     const profile = await loadProfile(env, user);
-    return Response.json(parseDict(await askJson(env, env.LOOKUP_MODEL, "entry", DICT_SCHEMA, dictQuestion(profile.data.lang, lemma)), lemma));
+    return Response.json(parseDict(await askJson(env, { user, kind: "dictionary" }, env.LOOKUP_MODEL, "entry", DICT_SCHEMA, dictQuestion(profile.data.lang, lemma)), lemma));
   }
 
   throw new HttpError(404, "Not found.");
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, bindings: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
+    const env: Env = { ...bindings, wait: (p) => ctx.waitUntil(p) };
     const headers = cors(env, req);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
     let res: Response;
@@ -455,7 +496,10 @@ export default {
       res = await route(req, env);
     } catch (e) {
       const status = e instanceof HttpError ? e.status : 500;
-      if (status === 500) console.log("request failed", e instanceof Error ? e.stack : e);
+      if (status === 500) {
+        console.log("request failed", e instanceof Error ? e.stack : e);
+        capture(env, "server", "server_error", { path: new URL(req.url).pathname.replace(/[\w-]{12,}/g, ":id"), error: (e instanceof Error ? e.message : String(e)).slice(0, 200) });
+      }
       res = Response.json({ error: e instanceof Error && status !== 500 ? e.message : e instanceof Error ? e.message : "Server error" }, { status });
     }
     const out = new Response(res.body, res);
@@ -469,7 +513,8 @@ export default {
     console.log(`backup written: ${done.key} (${done.rows} rows, ${done.bytes} bytes)`);
   },
 
-  async queue(batch: QueueBatch, env: Env): Promise<void> {
+  async queue(batch: QueueBatch, bindings: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
+    const env: Env = { ...bindings, wait: (p) => ctx.waitUntil(p) };
     for (const msg of batch.messages) {
       await runJob(env, msg.body.jobId);
       msg.ack();

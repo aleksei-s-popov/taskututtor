@@ -4,6 +4,7 @@ import "./style.css";
 import { icon } from "./icons";
 import { cefr, finishChapter, ykiProgress, knownCount, learningWords, MAX_LEVEL, MIN_LEVEL, type ChapterResult } from "./adapt";
 import { aiDictionaryCard, friendlyError, generateChapter, generateGlossary, generateIllustration, lookupWord, type NewSeriesRequest } from "./ai";
+import { identify, initAnalytics, resetIdentity, track } from "./analytics";
 import * as cloud from "./cloud";
 import { cacheCard, cachedCard, wiktionaryCard, type DictCard } from "./dict";
 import { compress, deleteImage, getImage, putImage } from "./images";
@@ -119,8 +120,15 @@ function applyAccount(): void {
   const device = { settings: state.settings, words: state.words };
   account = uid;
   useStorage(uid ? cloudKey(uid) : accountOnly ? SIGNED_OUT_KEY : LOCAL_KEY);
-  if (uid) localStorage.setItem("taskututtor.last-user", uid);
-  else localStorage.removeItem("taskututtor.last-user");
+  if (uid) {
+    localStorage.setItem("taskututtor.last-user", uid);
+    identify(uid);
+    track("signed_in");
+  } else {
+    localStorage.removeItem("taskututtor.last-user");
+    track("signed_out");
+    resetIdentity();
+  }
   const next = load();
   if (firstTime && device.settings.onboarded) {
     // First sign-in on this device: bring along the level and word knowledge built up locally.
@@ -148,6 +156,7 @@ function toast(msg: string): void {
 
 function go(v: View): void {
   if (accountOnly && !account) v = { name: "gate" };
+  if (v.name !== view.name || v.name === "reader") track("screen_viewed", { screen: v.name });
   closeSheet();
   playerClose();
   view = v;
@@ -810,6 +819,7 @@ async function illustrate(series: Series, ch: Chapter): Promise<void> {
     const reference = anchor ? (artCache.get(anchor.id) ?? (await getImage(anchor.id))) : undefined;
     let raw: string;
     if (inCloud()) {
+      track("illustration_requested", { repaint: !!ch.hasImage });
       await cloud.api(`/api/chapters/${ch.id}/illustrate`, "POST");
       raw = await cloud.fetchImage(ch.id);
     } else {
@@ -1074,6 +1084,15 @@ async function writeChapterCloud(series: Series | null, req: NewSeriesRequest | 
     // The server adapts the chapter to the latest feedback, level and words: send those first.
     clearTimeout(pushTimer);
     await cloud.push(state);
+    const asked = Date.now();
+    track("chapter_requested", {
+      chapter_number: series ? series.chapters.length + 1 : 1,
+      new_series: !series,
+      genre: series?.genre ?? req?.genre,
+      returning_characters: !!req?.from,
+      own_idea: !!req?.idea,
+      level: state.settings.level,
+    });
     const jobId = await cloud.requestChapter(series, req ? { genre: req.genre, idea: req.idea, fromSeriesId: req.from?.id } : null);
     let job = await cloud.jobStatus(jobId);
     for (let i = 0; i < 400 && (job.status === "queued" || job.status === "running"); i++) {
@@ -1085,6 +1104,7 @@ async function writeChapterCloud(series: Series | null, req: NewSeriesRequest | 
     await cloud.pull(state);
     save(state);
     const target = state.series.find((s) => s.id === job.seriesId);
+    track("chapter_ready", { seconds: Math.round((Date.now() - asked) / 1000), waited_on_screen: overlay.classList.contains("open") });
     if (overlay.classList.contains("open") && target) {
       go({ name: "reader", seriesId: target.id, idx: target.chapters.length - 1 });
     } else {
@@ -1092,6 +1112,7 @@ async function writeChapterCloud(series: Series | null, req: NewSeriesRequest | 
       if (view.name === "library") render();
     }
   } catch (e) {
+    track("chapter_request_failed", { reason: friendlyError(e).slice(0, 120) });
     toast(friendlyError(e));
   } finally {
     overlay.classList.remove("open");
@@ -1190,6 +1211,7 @@ document.addEventListener("click", (ev) => {
       cloud.signIn().catch((e) => toast(friendlyError(e)));
       break;
     case "join":
+      track("waitlist_opened");
       cloud.joinWaitlist().catch((e) => toast(friendlyError(e)));
       break;
     case "sign-out":
@@ -1225,6 +1247,7 @@ document.addEventListener("click", (ev) => {
       // Start from the sentence of the open word, if there is one.
       const from = sheetCtx ? playerOrder(ch).indexOf(sheetCtx.sid) : -1;
       closeSheet();
+      if (!player.active) track("listening_started", { chapter_number: view.name === "reader" ? view.idx + 1 : 0 });
       playerPlay(from >= 0 ? from : player.active ? player.idx : 0);
       break;
     }
@@ -1330,6 +1353,19 @@ document.addEventListener("click", (ev) => {
         break;
       }
       lastResult = { chapterId: ch.id, result: finishChapter(state, ch, d.fb as Feedback) };
+      track("chapter_finished", {
+        chapter_number: view.idx + 1,
+        chapter_level: ch.level,
+        feedback: d.fb,
+        distinct_words: lastResult.result.uniqueWords,
+        words_looked_up: lastResult.result.lookedUp,
+        sentences_translated: ch.peeked.length,
+        questions_right: lastResult.result.quiz.right,
+        questions_answered: lastResult.result.quiz.total,
+        level_change: lastResult.result.delta,
+        level_after: state.settings.level,
+        last_of_story: !!series.plan && view.idx + 1 >= arcLength(series),
+      });
       persist();
       document.getElementById("end")!.innerHTML = endHtml(series, ch, view.idx);
       break;
@@ -1399,6 +1435,7 @@ document.addEventListener("submit", (ev) => {
       toast(switched || "Saved");
     } else {
       s.onboarded = true;
+      track("onboarding_completed", { level: s.level, yki: s.yki });
       // The built-in sample is A1 and its translations are in English.
       if (s.level <= 2 && !inCloud()) state.series.push(sampleSeries());
     }
@@ -1446,6 +1483,8 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 render();
 
 if (cloud.cloudAvailable) {
+  void initAnalytics();
+  if (account) identify(account); // a returning reader, signed in from the cached session
   // Sign-in loads in the background; the cached library is already on screen.
   cloud
     .initAuth(applyAccount)

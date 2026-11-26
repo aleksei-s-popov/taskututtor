@@ -24,6 +24,11 @@ ALLOWED_ORIGINS = "*"
 # Weekly database exports to keep (12 = about three months).
 BACKUP_KEEP = "12"
 
+# Analytics (optional): a PostHog project token switches on usage, AI-cost and failure events
+# from the server. The token is public by design (the same one is built into the app).
+POSTHOG_KEY = ""
+POSTHOG_HOST = "https://eu.i.posthog.com"
+
 # Secrets — set with `wrangler secret put NAME`, never in this file:
 #   OPENROUTER_API_KEY   key that pays for generation
 #   CLERK_JWT_KEY        Clerk "JWKS public key" (PEM), used to verify sign-in tokens

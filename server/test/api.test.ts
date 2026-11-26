@@ -20,6 +20,8 @@ let worker: ChildProcess;
 let persist: string;
 /** What the fake AI service was asked, in order. */
 const asked: { kind: string; prompt?: string; reference?: boolean }[] = [];
+/** Analytics events the Worker sent to the fake PostHog. */
+const events: { event: string; distinct_id: string; properties: Record<string, any> }[] = [];
 
 function startMock(): Promise<number> {
   let n = 0;
@@ -29,6 +31,10 @@ function startMock(): Promise<number> {
     req.on("end", () => {
       const body = JSON.parse(raw || "{}");
       res.setHeader("content-type", "application/json");
+      if (req.url!.startsWith("/i/v0/e")) {
+        events.push(body);
+        return res.end("{}");
+      }
       if (req.url!.endsWith("/images")) {
         asked.push({ kind: "image", reference: !!body.input_references });
         return res.end(JSON.stringify({ data: [{ b64_json: PNG, media_type: "image/png" }] }));
@@ -60,7 +66,7 @@ function startMock(): Promise<number> {
           questions: [],
         };
       }
-      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) }, finish_reason: "stop" }] }));
+      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) }, finish_reason: "stop" }], usage: { prompt_tokens: 1200, completion_tokens: 800, cost: 0.0123 } }));
     });
   });
   return new Promise((resolve) => mock.listen(0, "127.0.0.1", () => resolve((mock.address() as AddressInfo).port)));
@@ -112,7 +118,7 @@ beforeAll(async () => {
   execFileSync(wrangler, ["d1", "execute", "taskututtor", "--local", "--persist-to", persist, "--file", "schema.sql"], { cwd: root, stdio: "pipe" });
   worker = spawn(
     wrangler,
-    ["dev", "--local", "--port", String(PORT), "--persist-to", persist, "--test-scheduled", "--var", "DEV_AUTH:1", "--var", "OPENROUTER_API_KEY:test", "--var", `OPENROUTER_BASE:http://127.0.0.1:${mockPort}`, "--var", "DAILY_CHAPTER_LIMIT:3"],
+    ["dev", "--local", "--port", String(PORT), "--persist-to", persist, "--test-scheduled", "--var", "DEV_AUTH:1", "--var", "OPENROUTER_API_KEY:test", "--var", `OPENROUTER_BASE:http://127.0.0.1:${mockPort}`, "--var", "DAILY_CHAPTER_LIMIT:3", "--var", "POSTHOG_KEY:phc_test", "--var", `POSTHOG_HOST:http://127.0.0.1:${mockPort}`],
     { cwd: root, stdio: "pipe", detached: true },
   );
   for (let i = 0; i < 300; i++) {
@@ -240,6 +246,25 @@ describe("account API", () => {
     await call("carol", "PUT", "/profile", { level: 1, lang: "English", interests: "", yki: false, illustrations: false, words: {} });
     const job = await write("carol", "/series/does-not-exist/next");
     expect(job).toMatchObject({ status: "error", error: "That series no longer exists." });
+  });
+
+  it("reports usage, AI cost and failures to analytics, without any story content", async () => {
+    await new Promise((r) => setTimeout(r, 500)); // background sends
+    const of = (user: string, event: string) => events.filter((e) => e.distinct_id === `dev:${user}` && e.event === event);
+
+    const calls = of("alice", "$ai_generation");
+    expect(new Set(calls.map((e) => e.properties.kind))).toEqual(new Set(["story", "glossary", "illustration", "lookup", "dictionary"]));
+    const story = calls.find((e) => e.properties.kind === "story")!;
+    expect(story.properties).toMatchObject({ $ai_model: "openai/gpt-6.1-terra", $ai_provider: "openrouter", $ai_total_cost_usd: 0.0123, $ai_input_tokens: 1200, $ai_output_tokens: 800, $ai_is_error: false });
+
+    expect(of("alice", "chapter_generated")).toHaveLength(3);
+    expect(of("alice", "chapter_generated")[0].properties).toMatchObject({ chapter_number: 1, level: 2.25, illustrated: true });
+    expect(of("alice", "daily_limit_reached")).toHaveLength(1);
+    expect(of("carol", "chapter_generation_failed")[0].properties).toMatchObject({ stage: "story", error: "That series no longer exists." });
+
+    expect(events.every((e) => (e as any).api_key === "phc_test")).toBe(true);
+    const sent = JSON.stringify(events);
+    for (const secret of ["Liisa", "kirjeen", "letter", "lighthouse", "Majakka"]) expect(sent).not.toContain(secret);
   });
 
   it("runs the scheduled database export", async () => {

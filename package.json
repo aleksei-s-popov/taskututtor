@@ -14,7 +14,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^1.14.0",
     "@clerk/clerk-js": "^6.48.0",
-    "@fontsource-variable/literata": "^5.3.0"
+    "@fontsource-variable/literata": "^5.3.0",
+    "posthog-js": "^1.455.4"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
