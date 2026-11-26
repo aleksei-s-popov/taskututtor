@@ -2,6 +2,13 @@ name = "taskututtor"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
 
+# The web app itself (built by `npm run build:web`) is served by the same Worker,
+# so one deployment gives you the site and its API on one address.
+[assets]
+directory = "./web"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
 [vars]
 # Models (OpenRouter ids). The story model writes chapters; the lookup model answers
 # single-word questions; the image model paints illustrations.

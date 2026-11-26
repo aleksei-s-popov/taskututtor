@@ -14,7 +14,9 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
+  const url = new URL(req.url);
+  // Never cache the account API: its answers change with every sync.
+  if (req.method !== "GET" || url.origin !== location.origin || url.pathname.includes("/api/")) return;
 
   const put = (res) => {
     if (res.ok) caches.open(CACHE).then((c) => c.put(req, res.clone()));

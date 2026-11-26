@@ -262,7 +262,8 @@ async function enqueue(env: Env, user: string, input: JobInput): Promise<Respons
   const dayStart = new Date().setUTCHours(0, 0, 0, 0);
   const limit = Number(env.DAILY_CHAPTER_LIMIT) || 5;
   const [written, pending] = await Promise.all([
-    env.DB.prepare("SELECT COUNT(*) AS n FROM chapters WHERE user_id = ? AND created_at >= ?").bind(user, dayStart).first<{ n: number }>(),
+    // Counted from finished jobs, not chapters, so deleting a series does not hand the quota back.
+    env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE user_id = ? AND status = 'done' AND created_at >= ?").bind(user, dayStart).first<{ n: number }>(),
     env.DB.prepare("SELECT id FROM jobs WHERE user_id = ? AND status IN ('queued', 'running') AND created_at >= ?")
       .bind(user, Date.now() - 20 * 60_000)
       .first<{ id: string }>(),

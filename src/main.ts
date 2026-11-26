@@ -4,11 +4,12 @@ import "./style.css";
 import { icon } from "./icons";
 import { cefr, finishChapter, ykiProgress, knownCount, learningWords, MAX_LEVEL, MIN_LEVEL, type ChapterResult } from "./adapt";
 import { aiDictionaryCard, friendlyError, generateChapter, generateIllustration, lookupWord, type NewSeriesRequest } from "./ai";
+import * as cloud from "./cloud";
 import { cacheCard, cachedCard, wiktionaryCard, type DictCard } from "./dict";
 import { compress, deleteImage, getImage, putImage } from "./images";
 import { sampleSeries } from "./sample";
 import { applyChapter } from "./story";
-import { activeKey, arcLength, formKey, seriesNames, IMAGE_MODELS, load, MODELS, OR_MODELS, save, tokenize, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
+import { activeKey, arcLength, formKey, seriesNames, IMAGE_MODELS, LOCAL_KEY, useStorage, load, MODELS, OR_MODELS, save, tokenize, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
 
 type View =
   | { name: "onboard" }
@@ -18,7 +19,16 @@ type View =
   | { name: "settings" }
   | { name: "reader"; seriesId: string; idx: number };
 
+// Account mode: signed-in readers get their library from the server (cached on the device so it
+// also opens offline). Everyone else uses the device-only library with their own API key.
+const cloudKey = (uid: string) => `taskututtor.cloud.${uid}`;
+let account: string | null = cloud.cloudAvailable ? localStorage.getItem("taskututtor.last-user") : null;
+if (account) useStorage(cloudKey(account));
+const inCloud = () => account !== null;
+
 const state = load();
+/** Whether new chapters and AI lookups are possible right now. */
+const canGenerate = () => inCloud() || !!activeKey(state.settings);
 let view: View = state.settings.onboarded ? { name: "library" } : { name: "onboard" };
 let lastResult: { chapterId: string; result: ChapterResult } | null = null;
 
@@ -57,7 +67,65 @@ function esc(s: string): string {
 }
 
 function persist(): void {
+  if (inCloud()) {
+    const sync = (state.sync ??= { lastSync: 0, dirtyProfile: false, dirtyChapters: [] });
+    sync.dirtyProfile = true;
+    const ch = currentChapter();
+    if (ch && !sync.dirtyChapters.includes(ch.id)) sync.dirtyChapters.push(ch.id);
+    clearTimeout(pushTimer);
+    pushTimer = window.setTimeout(() => void syncNow(false), 1500);
+  }
   if (!save(state)) toast("Storage is full — delete an old series to keep saving progress.");
+}
+
+let pushTimer = 0;
+let syncing = false;
+
+/** Sends unsent changes to the server and, optionally, fetches what other devices changed. */
+async function syncNow(pullToo: boolean): Promise<void> {
+  if (!inCloud() || syncing) return;
+  syncing = true;
+  try {
+    await cloud.push(state);
+    if (pullToo && (await cloud.pull(state))) {
+      // Re-rendering the reader would lose the reading position, so only refresh other screens.
+      if (view.name !== "reader" && !overlay.classList.contains("open")) render();
+    }
+    save(state);
+  } catch {
+    // Offline or signed out: changes stay marked as unsent and go out on the next sync.
+    save(state);
+  } finally {
+    syncing = false;
+  }
+}
+
+/** Switches between the device-only library and a signed-in account's library. */
+function applyAccount(): void {
+  const uid = cloud.userId();
+  if (uid === account) return;
+  clearTimeout(pushTimer);
+  const firstTime = !!uid && !localStorage.getItem(cloudKey(uid));
+  const device = { settings: state.settings, words: state.words };
+  account = uid;
+  useStorage(uid ? cloudKey(uid) : LOCAL_KEY);
+  if (uid) localStorage.setItem("taskututtor.last-user", uid);
+  else localStorage.removeItem("taskututtor.last-user");
+  const next = load();
+  if (firstTime && device.settings.onboarded) {
+    // First sign-in on this device: bring along the level and word knowledge built up locally.
+    // (An existing account's own profile replaces this as soon as it is fetched.)
+    const { onboarded, lang, level, interests, yki, fontSize, listenGap, listenRate } = device.settings;
+    Object.assign(next.settings, { onboarded, lang, level, interests, yki, fontSize, listenGap, listenRate });
+    next.words = structuredClone(device.words);
+  }
+  Object.assign(state, { settings: next.settings, series: next.series, words: next.words, sync: next.sync });
+  save(state);
+  artCache.clear();
+  view = state.settings.onboarded ? { name: "library" } : { name: "onboard" };
+  closeSheet();
+  render();
+  if (uid) void syncNow(true).then(() => (view.name === "onboard" && state.settings.onboarded ? go({ name: "library" }) : undefined));
 }
 
 let toastTimer = 0;
@@ -204,8 +272,9 @@ function onboardView(): string {
       <label class="field">What do you like to read? <span class="opt">optional</span>
         <input name="interests" placeholder="e.g. detective stories, space, cooking, dark humour">
       </label>
-      ${keyField(false)}
-      <p class="hint">No key yet? You can add it later in Settings and start with the free sample chapter.</p>
+      ${inCloud() ? "" : keyField(false)}
+      ${inCloud() ? "" : cloud.cloudAvailable ? `<p class="hint">Or <button type="button" class="link" data-act="sign-in">sign in</button> instead: no key needed, your library syncs between devices and chapters are written in the background.</p>` : ""}
+      <p class="hint" ${inCloud() ? "hidden" : ""}>No key yet? You can add it later in Settings and start with the free sample chapter.</p>
       <button class="btn primary" type="submit">Start reading</button>
     </form>
   </main>`;
@@ -259,7 +328,7 @@ function libraryView(): string {
       </section>`
         : ""
     }
-    ${activeKey(state.settings) ? "" : `<p class="notice">Add your API key in <a href="#" data-act="nav" data-to="settings">Settings</a> to generate new stories. The sample below works without it.</p>`}
+    ${canGenerate() ? "" : `<p class="notice">Add your API key in <a href="#" data-act="nav" data-to="settings">Settings</a> to generate new stories${cloud.cloudAvailable ? `, or <a href="#" data-act="sign-in">sign in</a> to use an account instead` : ""}. The sample below works without it.</p>`}
     <h2>Your series</h2>
     ${cards || `<p class="hint">Nothing here yet — start your first series.</p>`}
     <button class="btn primary wide" data-act="nav" data-to="new">${icon("plus")} New series</button>
@@ -340,8 +409,16 @@ function settingsView(): string {
     <h1>Settings</h1><span></span>
   </header>
   <main class="page">
+    ${
+      inCloud()
+        ? `<p class="notice">Signed in as <b>${esc(cloud.userLabel())}</b>. Your library and progress sync between your devices, and new chapters are written in the background.
+        <button class="link" data-act="sign-out">Sign out</button></p>`
+        : cloud.cloudAvailable
+          ? `<p class="notice"><button class="link" data-act="sign-in">Sign in</button> to sync your library between devices and have chapters written in the background — no API key needed.</p>`
+          : ""
+    }
     <form data-form="settings">
-      ${keyField(true)}
+      ${inCloud() ? "" : keyField(true)}
       ${langField()}
 <label class="check">
         <input type="checkbox" name="yki" ${state.settings.yki ? "checked" : ""}>
@@ -360,28 +437,36 @@ function settingsView(): string {
       <h2>Illustrations</h2>
       <label class="check">
         <input type="checkbox" name="illustrations" ${s.illustrations ? "checked" : ""}>
-        <span><b>Illustrate every new chapter</b><small>One picture per chapter, in a consistent style with the same characters. Costs a few cents each.</small></span>
+        <span><b>Illustrate every new chapter</b><small>One picture per chapter, in a consistent style with the same characters.${inCloud() ? "" : " Costs a few cents each."}</small></span>
       </label>
       ${
-        s.provider === "anthropic"
+        !inCloud() && s.provider === "anthropic"
           ? `<label class="field">OpenRouter API key <span class="opt">for illustrations</span>
         <input name="orKey" class="secret" type="text" placeholder="sk-or-…" value="${esc(s.orKey)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
         <small>Pictures are painted through <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter</a>, even when stories come from Anthropic.</small>
       </label>`
           : ""
       }
-      <label class="field">Illustrator
+      ${
+        inCloud()
+          ? ""
+          : `<label class="field">Illustrator
         <input name="imageModel" list="image-models" value="${esc(s.imageModel)}" autocomplete="off" spellcheck="false">
         <datalist id="image-models">${IMAGE_MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join("")}</datalist>
-      </label>
+      </label>`
+      }
       <button class="btn primary wide" type="submit">Save</button>
     </form>
-    <h2>Your data</h2>
+    ${
+      inCloud()
+        ? ""
+        : `    <h2>Your data</h2>
     <p class="hint">Everything is stored on this device only. Export a backup before clearing browser data or switching phones (illustrations are not included — they can be regenerated).</p>
     <div class="row">
       <button class="btn" data-act="export">Export backup</button>
       <label class="btn">Import backup<input type="file" accept="application/json" data-import hidden></label>
-    </div>
+    </div>`
+    }
   </main>`;
 }
 
@@ -626,11 +711,29 @@ function artHtml(ch: Chapter): string {
   return `<button class="btn small" data-act="illustrate">${icon("image", 18)} Illustrate this chapter</button>`;
 }
 
+/** A chapter's picture from this device, or — in account mode — downloaded once and kept. */
+async function storedImage(id: string): Promise<string | undefined> {
+  const local = artCache.get(id) ?? (await getImage(id));
+  if (local) {
+    artCache.set(id, local);
+    return local;
+  }
+  if (!inCloud()) return undefined;
+  try {
+    const url = await compress(await cloud.fetchImage(id));
+    await putImage(id, url);
+    artCache.set(id, url);
+    return url;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Fills the series cards on the home screen with their first illustration. */
 async function loadCovers(): Promise<void> {
   for (const el of document.querySelectorAll<HTMLElement>("[data-cover]")) {
     const id = el.dataset.cover!;
-    const url = artCache.get(id) ?? (await getImage(id));
+    const url = await storedImage(id);
     if (!url) {
       el.remove(); // the picture is gone (e.g. browser storage was cleared)
       continue;
@@ -651,15 +754,14 @@ function refreshArt(ch: Chapter): void {
 /** Loads the stored picture for the open chapter, if it has one. */
 async function loadArt(ch: Chapter): Promise<void> {
   if (!ch.hasImage || artCache.has(ch.id)) return;
-  const url = await getImage(ch.id);
-  if (url) artCache.set(ch.id, url);
-  else ch.hasImage = false; // storage was cleared
+  const url = await storedImage(ch.id);
+  if (!url && !inCloud()) ch.hasImage = false; // storage was cleared
   refreshArt(ch);
 }
 
 async function illustrate(series: Series, ch: Chapter): Promise<void> {
   if (painting.has(ch.id)) return;
-  if (!state.settings.orKey) {
+  if (!inCloud() && !state.settings.orKey) {
     toast("Illustrations need an OpenRouter key — add one in Settings.");
     return;
   }
@@ -671,7 +773,14 @@ async function illustrate(series: Series, ch: Chapter): Promise<void> {
     const parent = state.series.find((x) => x.id === series.basedOn);
     const anchor = series.chapters.find((c) => c.id !== ch.id && c.hasImage) ?? parent?.chapters.find((c) => c.hasImage);
     const reference = anchor ? (artCache.get(anchor.id) ?? (await getImage(anchor.id))) : undefined;
-    const url = await compress(await generateIllustration(state, series, ch, reference));
+    let raw: string;
+    if (inCloud()) {
+      await cloud.api(`/api/chapters/${ch.id}/illustrate`, "POST");
+      raw = await cloud.fetchImage(ch.id);
+    } else {
+      raw = await generateIllustration(state, series, ch, reference);
+    }
+    const url = await compress(raw);
     await putImage(ch.id, url);
     artCache.set(ch.id, url);
     ch.hasImage = true;
@@ -704,7 +813,7 @@ function dictHtml(): string {
   if (d.status === "error") return `<p class="note">${esc(d.message ?? "")}</p>`;
   if (d.status === "none" || !d.card) {
     return `<p class="note">No dictionary entry found for “${esc(d.lemma)}”.
-      ${activeKey(state.settings) ? `<button class="link" data-act="dict-ai">Write one with AI</button>` : ""}</p>`;
+      ${canGenerate() ? `<button class="link" data-act="dict-ai">Write one with AI</button>` : ""}</p>`;
   }
   const card = d.card;
   const total = card.entries.reduce((n, e) => n + e.senses.length, 0);
@@ -817,12 +926,12 @@ async function openWord(el: HTMLElement): Promise<void> {
   const peeked = ch.peeked.includes(sid);
 
   let g: GlossEntry | null = ch.glossary[key] ?? null;
-  sheet.innerHTML = sheetHtml(word, g, activeKey(state.settings) ? "Looking up…" : "No translation saved for this word. Add an API key in Settings to look it up.", peeked);
+  sheet.innerHTML = sheetHtml(word, g, canGenerate() ? "Looking up…" : "No translation saved for this word. Add an API key in Settings to look it up.", peeked);
   sheet.classList.add("open");
 
-  if (!g && activeKey(state.settings)) {
+  if (!g && canGenerate()) {
     try {
-      g = await lookupWord(state, word, ctx.sentence.fi);
+      g = inCloud() ? await cloud.api<GlossEntry>("/api/lookup", "POST", { word, sentence: ctx.sentence.fi }) : await lookupWord(state, word, ctx.sentence.fi);
       ch.glossary[key] = g;
       persist();
     } catch (e) {
@@ -852,7 +961,46 @@ function markLooked(ch: Chapter, lemma: string): void {
 
 // ---------- generation ----------
 
+/** Account mode: the server writes the chapter; the app only waits for it (or doesn't). */
+async function writeChapterCloud(series: Series | null, req: NewSeriesRequest | null): Promise<void> {
+  overlay.innerHTML = `
+    <div class="gen">
+      <div class="spinner"></div>
+      <h3>${series ? "Writing the next chapter…" : "Inventing your story…"}</h3>
+      <p class="hint">This usually takes a minute or two. It keeps going if you leave or close the app — the chapter will be waiting in your library.</p>
+      <button class="btn" data-act="gen-background">Read something else meanwhile</button>
+    </div>`;
+  overlay.classList.add("open");
+  try {
+    // The server adapts the chapter to the latest feedback, level and words: send those first.
+    clearTimeout(pushTimer);
+    await cloud.push(state);
+    const jobId = await cloud.requestChapter(series, req ? { genre: req.genre, idea: req.idea, fromSeriesId: req.from?.id } : null);
+    let job = await cloud.jobStatus(jobId);
+    for (let i = 0; i < 400 && (job.status === "queued" || job.status === "running"); i++) {
+      await new Promise((r) => setTimeout(r, 2500));
+      job = await cloud.jobStatus(jobId).catch(() => job); // a dropped connection is not a failed chapter
+    }
+    if (job.status === "error") throw new Error(job.error ?? "The chapter could not be written. Please try again.");
+    if (job.status !== "done") throw new Error("This is taking unusually long. The chapter will appear in your library when it is ready.");
+    await cloud.pull(state);
+    save(state);
+    const target = state.series.find((s) => s.id === job.seriesId);
+    if (overlay.classList.contains("open") && target) {
+      go({ name: "reader", seriesId: target.id, idx: target.chapters.length - 1 });
+    } else {
+      toast(target ? `A new chapter of “${target.title}” is ready.` : "Your new chapter is ready.");
+      if (view.name === "library") render();
+    }
+  } catch (e) {
+    toast(friendlyError(e));
+  } finally {
+    overlay.classList.remove("open");
+  }
+}
+
 async function writeChapter(series: Series | null, req: NewSeriesRequest | null): Promise<void> {
+  if (inCloud()) return writeChapterCloud(series, req);
   if (!activeKey(state.settings)) {
     toast("Add your API key in Settings to generate stories.");
     return go({ name: "settings" });
@@ -910,6 +1058,18 @@ document.addEventListener("click", (ev) => {
     case "delete-series": {
       const s = state.series.find((x) => x.id === d.id);
       if (s && confirm(`Delete "${s.title}" and its chapters? Your word knowledge is kept.`)) {
+        if (inCloud()) {
+          // Delete on the server first, so the series cannot come back with the next sync.
+          cloud
+            .api(`/api/series/${s.id}`, "DELETE")
+            .then(() => {
+              state.series = state.series.filter((x) => x.id !== s.id);
+              save(state);
+              if (view.name === "library") render();
+            })
+            .catch((e) => toast(friendlyError(e)));
+          break;
+        }
         for (const c of s.chapters) {
           artCache.delete(c.id);
           if (c.hasImage) void deleteImage(c.id);
@@ -926,6 +1086,18 @@ document.addEventListener("click", (ev) => {
       if (series && ch) void illustrate(series, ch);
       break;
     }
+    case "sign-in":
+      ev.preventDefault();
+      cloud.signIn();
+      break;
+    case "sign-out":
+      // Send what is unsent before leaving the account.
+      void syncNow(false).then(() => cloud.signOut());
+      break;
+    case "gen-background":
+      overlay.classList.remove("open");
+      go({ name: "library" });
+      break;
     case "word":
       void openWord(el);
       break;
@@ -999,7 +1171,7 @@ document.addEventListener("click", (ev) => {
       const lemma = ctx.dict.lemma;
       ctx.dict = { lemma, status: "loading", all: false };
       refreshDict();
-      aiDictionaryCard(state, lemma)
+      (inCloud() ? cloud.api<DictCard>("/api/dict", "POST", { lemma }) : aiDictionaryCard(state, lemma))
         .then((card) => {
           cacheCard(card);
           ctx.dict = { lemma, status: "ok", card, all: false };
@@ -1114,13 +1286,13 @@ document.addEventListener("submit", (ev) => {
       if (f.has("orModel")) s.orModel = text("orModel") || OR_MODELS[0].id;
       s.fontSize = Number(f.get("fontSize")) || s.fontSize;
       s.illustrations = f.has("illustrations");
-      s.imageModel = text("imageModel") || IMAGE_MODELS[0].id;
-      if (s.illustrations && !s.orKey) switched = "Illustrations need an OpenRouter key — add one above.";
+      if (f.has("imageModel")) s.imageModel = text("imageModel") || IMAGE_MODELS[0].id;
+      if (!inCloud() && s.illustrations && !s.orKey) switched = "Illustrations need an OpenRouter key — add one above.";
       toast(switched || "Saved");
     } else {
       s.onboarded = true;
       // The built-in sample is A1 and its translations are in English.
-      if (s.level <= 2) state.series.push(sampleSeries());
+      if (s.level <= 2 && !inCloud()) state.series.push(sampleSeries());
     }
     persist();
     go({ name: "library" });
@@ -1164,3 +1336,17 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 }
 
 render();
+
+if (cloud.cloudAvailable) {
+  // Sign-in loads in the background; the cached library is already on screen.
+  cloud
+    .initAuth(applyAccount)
+    .then(() => {
+      applyAccount();
+      void syncNow(true);
+    })
+    .catch(() => undefined); // offline: keep working from the cache
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void syncNow(true);
+  });
+}

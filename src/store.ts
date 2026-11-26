@@ -123,9 +123,25 @@ export interface State {
   settings: Settings;
   series: Series[];
   words: Record<string, WordStat>;
+  /** account mode only: what still has to be sent to, or fetched from, the server */
+  sync?: SyncState;
 }
 
-const KEY = "taskututtor.v1";
+export interface SyncState {
+  /** server time of the last successful pull */
+  lastSync: number;
+  dirtyProfile: boolean;
+  /** ids of chapters whose reading progress changed on this device */
+  dirtyChapters: string[];
+}
+
+export const LOCAL_KEY = "taskututtor.v1";
+let KEY = LOCAL_KEY;
+
+/** Switches which stored library load() and save() use (the device's own, or a signed-in account's cache). */
+export function useStorage(key: string): void {
+  KEY = key;
+}
 
 /** Suggestions only — any OpenRouter model id can be typed in. */
 export const OR_MODELS = [
@@ -190,6 +206,7 @@ export function load(): State {
       settings: { ...base.settings, ...saved.settings, ...legacy },
       series: saved.series ?? [],
       words: saved.words ?? {},
+      sync: saved.sync,
     };
   } catch {
     return base;

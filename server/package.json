@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "build:web": "cd .. && npm ci && VITE_API_URL=/ npx vite build --outDir server/web --emptyOutDir",
+    "deploy": "npm run build:web && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "db:local": "wrangler d1 execute taskututtor --local --file=schema.sql",
     "db:remote": "wrangler d1 execute taskututtor --remote --file=schema.sql"

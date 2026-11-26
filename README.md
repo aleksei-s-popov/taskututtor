@@ -62,6 +62,16 @@ progress are stored only in your browser; the key is sent only to the provider y
 Tips: aim to look up only a handful of words per chapter — if you're tapping every other word,
 answer "Too hard". Be honest with the feedback buttons; they are the strongest signal the app gets.
 
+## Two ways to run it
+
+- **Personal-key mode (this repo's default build, and the public site):** no account, no server.
+  You bring an OpenRouter or Anthropic key; everything stays on your device. Nothing syncs.
+- **Account mode (optional):** readers sign in, their library and progress sync between devices,
+  and chapters are written on a server in the background, so no key is needed in the app. It needs
+  the small backend in [`server/`](server/README.md) (Cloudflare Workers + Clerk) and is switched on
+  by building the app with `VITE_API_URL` and `VITE_CLERK_PUBLISHABLE_KEY`. Signed-out readers of
+  such a build still get personal-key mode.
+
 ## Develop
 
 ```bash
