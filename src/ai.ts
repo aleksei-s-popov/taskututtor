@@ -30,9 +30,9 @@ export function friendlyError(e: unknown): string {
 function levelBrief(level: number): { words: number; brief: string } {
   if (level < 0.9)
     return {
-      words: 90,
+      words: 120,
       brief:
-        "Absolute beginner (pre-A1). Only the ~200 most frequent words, plus international/cognate words and names. Sentences of 3–6 words. Present tense, basic verb type 1, olla, minulla on. Nominative, a few -ssa/-lla forms. Heavy repetition of the same words and patterns.",
+        "Absolute beginner (pre-A1). Only the ~200 most frequent words, plus international/cognate words and names. Sentences of 3–6 words. Present tense, basic verb type 1, olla, minulla on. Nominative, a few -ssa/-lla forms. Repeat the same words and sentence patterns a lot — but never the same events.",
     };
   if (level < 1.5)
     return {
@@ -68,27 +68,34 @@ function levelBrief(level: number): { words: number; brief: string } {
 const SYSTEM = `You write serialized fiction for an adult learning Finnish through comprehensible input (extensive reading). You are both a gripping storyteller and an expert in Finnish as a second language.
 
 Craft:
-- The story must be genuinely hard to put down: a protagonist who wants something, real stakes, secrets, tension, surprises, humour and warmth. Never write a textbook dialogue or a lesson in disguise.
-- Start in the middle of something happening. Lots of dialogue and concrete action. End every chapter on a hook or cliffhanger that makes the reader need the next one.
-- Keep continuity with the story so far: same characters, facts and open threads. Move the plot forward meaningfully each chapter.
+- The story must be genuinely hard to put down: a protagonist who wants something and acts to get it, real stakes, secrets, surprises, humour and warmth. Let the reader's interests shape the tone and themes. Never write a textbook dialogue or a lesson in disguise.
+- Every series follows a secret plan: you decide up front what is really going on and how it ends, then tell it over a fixed number of chapters. Mysteries are only satisfying because they get answered — plant questions AND pay them off on schedule.
+- Every chapter must change the situation irreversibly. By its end at least one of these has happened: a question is answered, a secret comes out, the characters are in a new place, someone new enters, a decision is made that cannot be undone, something is won or lost. A chapter that only adds more mystery, more threats or more "who is lying?" is a failed chapter.
+- Never repeat a beat. Check the chapter log: if something like it already happened (another knock, another voice, another warning, another object that moves), do something different. Do not let characters stand in the same room reacting for chapter after chapter — move through places, time and events. Time jumps and scene changes are welcome.
+- Open each chapter by resolving the previous chapter's hook within the first few sentences — show what actually happened. Then move on to this chapter's planned event. End on a new hook of a different kind than last time (a discovery, a choice, an arrival, a reversal — not always a threat).
+- Stay consistent: characters, facts and rules established earlier remain true. If the canon says the cat can talk, it does not surprise anyone later. Never contradict the secret truth of the plan.
+- A simple vocabulary is no excuse for a static plot: with 200 words people can still run, find, steal, meet, lie, travel, lose and win.
 
 Language:
 - Write natural, correct Finnish that a native would accept, graded precisely to the stated level. Simplicity comes from word choice, short sentences and repetition — never from broken grammar.
 - The text should sit slightly above the reader's level: roughly 95% of running words should be familiar at that level, with about 5% new, guessable from context where possible.
-- Reuse new and "still learning" words several times within the chapter so they stick.
+- Reuse new words several times within the chapter so they stick. "Still learning" words from earlier chapters are optional seasoning: use them only where the new events call for them, and never bend or stall the plot to fit them in.
+- Before you answer, proofread every Finnish sentence as a strict native editor: verb forms after the negative verb (ei naura, not "ei nauraa"), cases required by verbs and postpositions (oven takana, not "taakse ovea"), possessive suffixes (hänen jalkansa), object cases. Fix anything a native would not write.
 - Respect the target chapter length.
 
 Output:
 - paragraphs: the chapter split into paragraphs, each a list of sentences. Each sentence has the Finnish text ("fi", with its punctuation and quotation marks) and a natural translation ("tr") in the reader's translation language. A line of dialogue with its speech tag is one sentence.
 - glossary: one entry for EVERY distinct word form that appears in the Finnish text (function words and names too). "form" is the word exactly as written in the text, lowercased, without surrounding punctuation; hyphenated compounds and forms like "EU:n" are a single form. "lemma" is the dictionary form. "tr" is a short translation of this form as used here, in the translation language. "note" is a very short grammar hint in the translation language (e.g. "inessive of talo", "past, 3rd sg of mennä") or "" when the form is already the dictionary form. "name" is true for proper names.
-- story_so_far: an updated summary in English (max 180 words) of the whole story up to and including this chapter — characters, key facts, open threads — written for yourself to continue the story later.
+- story_so_far: the series canon in English (max 250 words), updated to include this chapter and written for yourself: who the characters are and what each wants, facts and rules established so far, where everyone is right now, which questions have been ANSWERED (with the answer) and which are still open. Drop atmosphere; keep facts.
+- chapter_recap: one English sentence (max 30 words) stating what concretely happened and changed in this chapter.
+- plan: the secret plot plan. When you are asked to create a plan, fill it in: "truth" = what is really going on and why (the answer to the central mystery; 2–4 sentences), "ending" = how the arc ends, "beats" = one entry per remaining chapter of the arc, in order, starting with the chapter you are writing now — each a concrete event that changes the situation, with its location; the last beat resolves the central conflict. When you are given an existing plan to follow, return empty strings and an empty beats list.
 - art_bible: in English, the fixed visual identity of the series for an illustrator (max 150 words): one consistent art style (medium, palette, mood) that suits the genre, then the exact unchanging look of each recurring character (age, build, hair, face, signature clothing) and key locations. For a continuing series you are given the existing art bible: return it word for word, only appending newly introduced recurring characters or locations.
 - illustration_scene: in English, one visually striking moment from this chapter for a single illustration (max 60 words): who is in frame, what they are doing, setting, light and mood. Do not give away the chapter's final twist.`;
 
 const CHAPTER_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["series_title", "series_premise", "chapter_title", "chapter_title_tr", "paragraphs", "glossary", "story_so_far", "art_bible", "illustration_scene"],
+  required: ["series_title", "series_premise", "chapter_title", "chapter_title_tr", "paragraphs", "glossary", "story_so_far", "art_bible", "illustration_scene", "chapter_recap", "plan"],
   properties: {
     series_title: { type: "string", description: "Series title in Finnish" },
     series_premise: { type: "string", description: "One-sentence spoiler-free teaser in the translation language" },
@@ -124,6 +131,17 @@ const CHAPTER_SCHEMA = {
     story_so_far: { type: "string" },
     art_bible: { type: "string" },
     illustration_scene: { type: "string" },
+    chapter_recap: { type: "string" },
+    plan: {
+      type: "object",
+      additionalProperties: false,
+      required: ["truth", "ending", "beats"],
+      properties: {
+        truth: { type: "string" },
+        ending: { type: "string" },
+        beats: { type: "array", items: { type: "string" } },
+      },
+    },
   },
 };
 
@@ -137,6 +155,8 @@ interface ChapterPayload {
   story_so_far: string;
   art_bible: string;
   illustration_scene: string;
+  chapter_recap: string;
+  plan: { truth: string; ending: string; beats: string[] };
 }
 
 export interface NewSeriesRequest {
@@ -160,7 +180,7 @@ function buildPrompt(state: State, series: Series | null, req: NewSeriesRequest 
   if (known) lines.push(`The reader has shown they know about ${known} word families so far.`);
   if (learning.length)
     lines.push(
-      `Words the reader recently had to look up and is still learning — weave a good handful of these back in naturally (do not force all of them): ${learning.join(", ")}`,
+      `Words the reader recently looked up and is still learning (optional — use some only where this chapter's new events naturally need them): ${learning.join(", ")}`,
     );
 
   const last = series?.chapters.at(-1);
@@ -175,14 +195,47 @@ function buildPrompt(state: State, series: Series | null, req: NewSeriesRequest 
   }
 
   if (series && series.chapters.length) {
+    const n = series.chapters.length; // index of the chapter being written
     lines.push(
       "",
-      `Continue the series "${series.title}" (${series.genre}). Write chapter ${series.chapters.length + 1}.`,
+      `Continue the series "${series.title}" (${series.genre}). Write chapter ${n + 1}.`,
       `Premise: ${series.premise}`,
-      `Story so far: ${series.storySoFar}`,
+      `Canon so far: ${series.storySoFar}`,
     );
+    const log = series.chapters.map((c, i) => `${i + 1}. ${c.recap || `"${c.titleTr || c.title}"`}`);
+    lines.push("Chapter log (what already happened — do not repeat any of it):", log.join("\n"));
+
+    const plan = series.plan;
+    const beat = plan ? n - plan.start : -1;
+    if (plan && beat >= 0 && beat < plan.beats.length) {
+      const final = beat === plan.beats.length - 1;
+      lines.push(
+        "",
+        "SECRET PLAN for this arc (follow it; never reveal anything before its beat):",
+        `Truth: ${plan.truth}`,
+        `Ending: ${plan.ending}`,
+        plan.beats.map((b, i) => `${plan.start + i + 1}. ${b}${i < beat ? " (done)" : i === beat ? "  ← WRITE THIS NOW" : ""}`).join("\n"),
+        final
+          ? "This is the FINAL chapter of the arc: resolve the central conflict and answer the remaining open questions. Give a satisfying ending — no cliffhanger (a light closing note is fine)."
+          : `This chapter must deliver beat ${plan.start + beat + 1} in full, and end on a hook that leads to beat ${plan.start + beat + 2}.`,
+        "You are following an existing plan: return plan with empty strings and an empty beats list.",
+      );
+    } else if (plan) {
+      lines.push(
+        "",
+        `The previous story arc has ended (truth: ${plan.truth} Ending: ${plan.ending}).`,
+        "Create a NEW plan for a sequel arc of 8–12 chapters with the same main characters but a fresh central conflict, new places and new stakes. Its first beat is the chapter you write now.",
+      );
+    } else {
+      lines.push(
+        "",
+        "This series has NO plan and has been stalling: recent chapters repeated the same situation and kept adding questions without answering any.",
+        "Fix it now. Create a plan that brings the story to a real ending in 6–8 more chapters: decide the truth that explains what has happened so far (honouring the canon), then beats in which the open questions are answered one by one, the characters leave the current location, and things actually change. The first beat is the chapter you write now, and it must break the deadlock with a decisive event — starting by showing what the previous chapter's hook really was.",
+      );
+    }
     if (last) {
       lines.push(
+        "",
         `Previous chapter ("${last.title}") in full, so you can pick up exactly where it ended:`,
         last.paragraphs.map((p) => p.map((s) => s.fi).join(" ")).join("\n"),
       );
@@ -195,6 +248,7 @@ function buildPrompt(state: State, series: Series | null, req: NewSeriesRequest 
       `Start a brand-new series and write chapter 1. Genre: ${req.genre}.`,
       req.idea.trim() ? `The reader's idea for it: ${req.idea.trim()}` : "Invent a fresh, specific premise — avoid clichés.",
       "Set it somewhere that lets Finnish life and culture show through when that fits the genre.",
+      "Create the secret plan for a complete story of 9–12 chapters: the truth behind it, the ending, and one beat per chapter (beat 1 is this chapter). Vary locations and kinds of events across the beats; put a major reveal or reversal around the middle.",
     );
     const titles = state.series.map((s) => s.title);
     if (titles.length) lines.push(`Make it different from the reader's existing series: ${titles.join("; ")}.`);
@@ -207,7 +261,8 @@ function toChapter(p: ChapterPayload, level: number): Chapter {
   for (const g of p.glossary) {
     const entry: GlossEntry = { lemma: g.lemma, tr: g.tr, note: g.note };
     if (g.name) entry.name = true;
-    glossary[formKey(g.form.trim())] = entry;
+    // Models sometimes leave punctuation on the form ("ei!", "sanoo:").
+    glossary[formKey(g.form.trim().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))] = entry;
   }
   const paragraphs = p.paragraphs
     .map((para) => para.filter((s) => s.fi.trim()).map((s) => ({ fi: s.fi.trim(), tr: s.tr.trim() })))
@@ -224,6 +279,7 @@ function toChapter(p: ChapterPayload, level: number): Chapter {
     peeked: [],
     finished: false,
     scene: p.illustration_scene || undefined,
+    recap: p.chapter_recap || undefined,
   };
 }
 

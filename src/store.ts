@@ -30,10 +30,27 @@ export interface Chapter {
   finished: boolean;
   feedback?: Feedback;
   levelDelta?: number;
+  /** one-line summary of what happened (kept as a log so later chapters don't repeat it) */
+  recap?: string;
   /** the moment of this chapter to illustrate (written by the story model) */
   scene?: string;
   /** an illustration is stored for this chapter (see images.ts) */
   hasImage?: boolean;
+}
+
+export interface SeriesPlan {
+  /** what is really going on (the answer to the story's central question) */
+  truth: string;
+  ending: string;
+  /** one planned event per chapter */
+  beats: string[];
+  /** index of the chapter that beats[0] belongs to */
+  start: number;
+}
+
+/** Number of chapters the current arc runs to, or 0 when the series has no plan. */
+export function arcLength(s: Series): number {
+  return s.plan ? s.plan.start + s.plan.beats.length : 0;
 }
 
 export interface Series {
@@ -43,6 +60,8 @@ export interface Series {
   genre: string;
   /** running summary used to keep continuity between chapters */
   storySoFar: string;
+  /** hidden plot plan for the current story arc — never shown to the reader (spoilers) */
+  plan?: SeriesPlan;
   /** fixed art style + character looks, so every illustration of the series matches */
   artBible?: string;
   chapters: Chapter[];

@@ -4,7 +4,7 @@ import { aiDictionaryCard, friendlyError, generateChapter, generateIllustration,
 import { cacheCard, cachedCard, wiktionaryCard, type DictCard } from "./dict";
 import { compress, deleteImage, getImage, putImage } from "./images";
 import { sampleSeries } from "./sample";
-import { activeKey, formKey, IMAGE_MODELS, load, MODELS, OR_MODELS, save, tokenize, uid, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
+import { activeKey, arcLength, formKey, IMAGE_MODELS, load, MODELS, OR_MODELS, save, tokenize, uid, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
 
 type View =
   | { name: "onboard" }
@@ -377,7 +377,14 @@ function endHtml(series: Series, ch: Chapter, idx: number): string {
            Level: <b>${cefr(state.settings.level)} · ${state.settings.level.toFixed(2)}</b>${d ? ` (${d > 0 ? "+" : ""}${d.toFixed(2)})` : ""}. ${move}</p>`
         : `<p class="hint">Chapter finished ✓</p>`
     }
-    <button class="btn primary wide" data-act="next">${hasNext ? "Next chapter ›" : "Write the next chapter ›"}</button>`;
+    ${
+      !hasNext && series.plan && series.chapters.length >= arcLength(series)
+        ? `<h3>The end 🎉</h3>
+           <p class="hint">This story has reached its ending. Start something new, or follow the same characters into a new adventure.</p>
+           <button class="btn primary wide" data-act="nav" data-to="new">＋ New series</button>
+           <button class="btn wide" data-act="next">Write a sequel ›</button>`
+        : `<button class="btn primary wide" data-act="next">${hasNext ? "Next chapter ›" : "Write the next chapter ›"}</button>`
+    }`;
 }
 
 function readerView(): string {
@@ -396,7 +403,7 @@ function readerView(): string {
     </span>
   </header>
   <main class="page reader">
-    <p class="kicker">Chapter ${idx + 1} · ${cefr(ch.level)}</p>
+    <p class="kicker">Chapter ${idx + 1}${series.plan && idx >= series.plan.start && idx < arcLength(series) ? ` of ${arcLength(series)}` : ""} · ${cefr(ch.level)}</p>
     <h2 class="chapter-title">${esc(ch.title)}</h2>
     <figure class="art" id="art">${artHtml(ch)}</figure>
     <p class="hint">Tap a word for its meaning. Try to guess first.</p>
@@ -660,6 +667,11 @@ async function writeChapter(series: Series | null, req: NewSeriesRequest | null)
       target.chapters.push(chapter);
       target.storySoFar = payload.story_so_far;
       if (payload.art_bible) target.artBible = payload.art_bible;
+      // A new plan is only accepted when one was asked for: no plan yet, or the arc is over.
+      const beats = (payload.plan?.beats ?? []).filter((b) => b.trim());
+      if (beats.length && (!target.plan || target.chapters.length > arcLength(target))) {
+        target.plan = { truth: payload.plan.truth, ending: payload.plan.ending, beats, start: target.chapters.length - 1 };
+      }
     } else {
       target = {
         id: uid(),
@@ -668,6 +680,7 @@ async function writeChapter(series: Series | null, req: NewSeriesRequest | null)
         genre: req?.genre ?? "Story",
         storySoFar: payload.story_so_far,
         artBible: payload.art_bible || undefined,
+        plan: payload.plan?.beats?.length ? { truth: payload.plan.truth, ending: payload.plan.ending, beats: payload.plan.beats, start: 0 } : undefined,
         chapters: [chapter],
         createdAt: Date.now(),
       };

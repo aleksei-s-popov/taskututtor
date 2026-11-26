@@ -68,6 +68,15 @@ npm run build    # type-check and build to dist/
 `.github/workflows/deploy.yml` builds and publishes to GitHub Pages on every push.
 Enable it once under **Settings → Pages → Source: GitHub Actions**.
 
+## How stories stay on track
+
+Each series is written against a hidden plan made with chapter 1: what is really going on, how it
+ends, and one planned event per chapter (9–12 chapters). Every chapter prompt carries that plan, a
+one-line log of all earlier chapters and a canon of established facts, and must deliver its planned
+event, resolve the previous hook and change the situation. The reader sees only "Chapter 3 of 11";
+at the end you can start a new series or a sequel with the same characters. Series created before
+plans existed get a rescue plan on their next chapter that wraps them up in 6–8 chapters.
+
 ## How adaptation works
 
 Level is a number where 1.0 = A1, 2.0 = A2, 3.0 = B1, 4.0 = B2, 5.0 = C1. The target is the
