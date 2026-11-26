@@ -221,6 +221,8 @@ export async function pull(state: State): Promise<boolean> {
     const next = { ...r.data };
     if (local && sync.dirtyChapters.includes(r.id)) {
       for (const f of PROGRESS) (next as unknown as Record<string, unknown>)[f] = local[f];
+      // The server may have written the glossary meanwhile: keep it, plus this device's own lookups.
+      next.glossary = { ...r.data.glossary, ...local.glossary };
     }
     series.chapters[r.idx] = next;
     changed = true;

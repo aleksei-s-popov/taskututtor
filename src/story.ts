@@ -4,7 +4,7 @@
 
 import { cefr, learningWords } from "./adapt";
 import type { DictCard } from "./dict";
-import { arcLength, formKey, seriesNames, uid, type Chapter, type GlossEntry, type Series, type Settings, type State } from "./store";
+import { arcLength, formKey, seriesNames, tokenize, uid, type Chapter, type GlossEntry, type Series, type Settings, type State } from "./store";
 
 /** What the prompt needs to know about the reader. */
 export interface PromptState {
@@ -91,7 +91,6 @@ Language:
 
 Output:
 - paragraphs: the chapter split into paragraphs, each a list of sentences. Each sentence has the Finnish text ("fi", with its punctuation and quotation marks) and a natural translation ("tr") in the reader's translation language. A line of dialogue with its speech tag is one sentence.
-- glossary: one entry for EVERY distinct word form that appears in the Finnish text (function words and names too). "form" is the word exactly as written in the text, lowercased, without surrounding punctuation; hyphenated compounds and forms like "EU:n" are a single form. "lemma" is the dictionary form. "tr" is a short translation of this form as used here, in the translation language. "note" is a very short grammar hint in the translation language (e.g. "inessive of talo", "past, 3rd sg of mennä"; call an -n object form "object form (genitive) of talo", and name the case that the form actually is in this sentence) or "" when the form is already the dictionary form. "name" is true for proper names.
 - story_so_far: the series canon in English (max 250 words), updated to include this chapter and written for yourself: who the characters are and what each wants, facts and rules established so far, where everyone is right now, which questions have been ANSWERED (with the answer) and which are still open. Drop atmosphere; keep facts.
 - chapter_recap: one English sentence (max 30 words) stating what concretely happened and changed in this chapter.
 - plan: the secret plot plan. When you are asked to create a plan, fill it in: "truth" = what is really going on and why (the answer to the central mystery; 2–4 sentences), "ending" = how the arc ends, "beats" = one entry per remaining chapter of the arc, in order, starting with the chapter you are writing now — each a concrete event that changes the situation, with its location; the last beat resolves the central conflict. When you are given an existing plan to follow, return empty strings and an empty beats list.
@@ -101,7 +100,7 @@ Output:
 export const CHAPTER_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["series_title", "series_premise", "chapter_title", "chapter_title_tr", "paragraphs", "glossary", "story_so_far", "art_bible", "illustration_scene", "chapter_recap", "plan", "questions"],
+  required: ["series_title", "series_premise", "chapter_title", "chapter_title_tr", "paragraphs", "story_so_far", "art_bible", "illustration_scene", "chapter_recap", "plan", "questions"],
   properties: {
     series_title: { type: "string", description: "Series title in Finnish" },
     series_premise: { type: "string", description: "One-sentence spoiler-free teaser in the translation language" },
@@ -116,21 +115,6 @@ export const CHAPTER_SCHEMA = {
           additionalProperties: false,
           required: ["fi", "tr"],
           properties: { fi: { type: "string" }, tr: { type: "string" } },
-        },
-      },
-    },
-    glossary: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["form", "lemma", "tr", "note", "name"],
-        properties: {
-          form: { type: "string" },
-          lemma: { type: "string" },
-          tr: { type: "string" },
-          note: { type: "string" },
-          name: { type: "boolean" },
         },
       },
     },
@@ -171,7 +155,6 @@ export interface ChapterPayload {
   chapter_title: string;
   chapter_title_tr: string;
   paragraphs: { fi: string; tr: string }[][];
-  glossary: { form: string; lemma: string; tr: string; note: string; name: boolean }[];
   story_so_far: string;
   art_bible: string;
   illustration_scene: string;
@@ -328,14 +311,11 @@ export function buildPrompt(state: PromptState, series: Series | null, req: NewS
   return lines.filter((l, i) => l || i === lines.indexOf("")).join("\n");
 }
 
+/**
+ * Turns the story model's answer into a chapter. The word glossary is not part of it: a second,
+ * cheaper model writes that afterwards (see glossaryPrompt), so the story can be read sooner.
+ */
 export function toChapter(p: ChapterPayload, level: number): Chapter {
-  const glossary: Record<string, GlossEntry> = {};
-  for (const g of p.glossary) {
-    const entry: GlossEntry = { lemma: g.lemma, tr: g.tr, note: g.note };
-    if (g.name) entry.name = true;
-    // Models sometimes leave punctuation on the form ("ei!", "sanoo:").
-    glossary[formKey(g.form.trim().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))] = entry;
-  }
   const paragraphs = p.paragraphs
     .map((para) => para.filter((s) => s.fi.trim()).map((s) => ({ fi: s.fi.trim(), tr: s.tr.trim() })))
     .filter((para) => para.length);
@@ -345,7 +325,8 @@ export function toChapter(p: ChapterPayload, level: number): Chapter {
     title: p.chapter_title,
     titleTr: p.chapter_title_tr,
     paragraphs,
-    glossary,
+    glossary: {},
+    glossaryPending: true,
     level,
     lookedUp: [],
     peeked: [],
@@ -501,4 +482,80 @@ export function applyChapter(series: Series | null, chapter: Chapter, payload: C
     chapters: [chapter],
     createdAt: Date.now(),
   };
+}
+
+// ---------- the word glossary (written by a second, cheaper model) ----------
+
+export const GLOSSARY_SYSTEM = `You are a Finnish lexicographer writing the tap-to-translate glossary of a graded reader for learners of Finnish.
+
+You get a chapter (each Finnish sentence with its translation) and the list of every distinct word form in it. Return exactly one glossary entry per listed form, in the same order:
+- "form": the form exactly as listed.
+- "lemma": its dictionary form.
+- "tr": a short translation of this form as it is used in this chapter, in the translation language.
+- "note": a very short grammar hint in the translation language (e.g. "inessive of talo", "past, 3rd sg of mennä"; call an -n object form "object form (genitive) of talo", and name the case the form actually is in its sentence), or "" when the form is already the dictionary form.
+- "name": true for proper names.
+Be exact: learners trust these entries.`;
+
+export const GLOSSARY_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["glossary"],
+  properties: {
+    glossary: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["form", "lemma", "tr", "note", "name"],
+        properties: {
+          form: { type: "string" },
+          lemma: { type: "string" },
+          tr: { type: "string" },
+          note: { type: "string" },
+          name: { type: "boolean" },
+        },
+      },
+    },
+  },
+};
+
+/** Every distinct word form of a chapter, in reading order. */
+export function chapterForms(ch: Chapter): string[] {
+  const forms = new Set<string>();
+  for (const p of ch.paragraphs) for (const s of p) for (const t of tokenize(s.fi)) if (t.word) forms.add(formKey(t.text));
+  return [...forms];
+}
+
+/** The request for a chapter's glossary. The word list comes from code, so no word can be left out. */
+export function glossaryPrompt(ch: Chapter, lang: string): string {
+  const forms = chapterForms(ch);
+  const text = ch.paragraphs
+    .flat()
+    .map((s) => `${s.fi}\n  = ${s.tr}`)
+    .join("\n");
+  return `Translation language: ${lang}.\n\nCHAPTER\n${text}\n\nWORD FORMS (${forms.length})\n${forms.join("\n")}`;
+}
+
+/**
+ * Stores the glossary model's answer on the chapter. Returns false (leaving the chapter waiting
+ * for a retry) when the answer is unusable or covers less than most of the chapter's words.
+ */
+export function applyGlossary(ch: Chapter, answer: string): boolean {
+  const parsed = parseJson<{ glossary: { form: string; lemma: string; tr: string; note: string; name: boolean }[] }>(answer);
+  if (!parsed || !Array.isArray(parsed.glossary)) return false;
+  const glossary: Record<string, GlossEntry> = {};
+  for (const g of parsed.glossary) {
+    if (!g?.form || !g.tr) continue;
+    const entry: GlossEntry = { lemma: g.lemma || g.form, tr: g.tr, note: g.note ?? "" };
+    if (g.name) entry.name = true;
+    // Models sometimes leave punctuation on the form ("ei!", "sanoo:").
+    glossary[formKey(g.form.trim().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))] = entry;
+  }
+  const forms = chapterForms(ch);
+  const covered = forms.filter((f) => glossary[f]).length;
+  if (!forms.length || covered / forms.length < 0.8) return false;
+  // Entries the reader already looked up one by one stay as they are.
+  ch.glossary = { ...glossary, ...ch.glossary };
+  ch.glossaryPending = false;
+  return true;
 }

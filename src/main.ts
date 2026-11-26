@@ -3,13 +3,13 @@ import "@fontsource-variable/literata/wght-italic.css";
 import "./style.css";
 import { icon } from "./icons";
 import { cefr, finishChapter, ykiProgress, knownCount, learningWords, MAX_LEVEL, MIN_LEVEL, type ChapterResult } from "./adapt";
-import { aiDictionaryCard, friendlyError, generateChapter, generateIllustration, lookupWord, type NewSeriesRequest } from "./ai";
+import { aiDictionaryCard, friendlyError, generateChapter, generateGlossary, generateIllustration, lookupWord, type NewSeriesRequest } from "./ai";
 import * as cloud from "./cloud";
 import { cacheCard, cachedCard, wiktionaryCard, type DictCard } from "./dict";
 import { compress, deleteImage, getImage, putImage } from "./images";
 import { sampleSeries } from "./sample";
 import { applyChapter } from "./story";
-import { activeKey, arcLength, formKey, seriesNames, IMAGE_MODELS, LOCAL_KEY, useStorage, load, MODELS, OR_MODELS, save, tokenize, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
+import { activeKey, arcLength, formKey, seriesNames, GLOSSARY_MODEL, IMAGE_MODELS, LOCAL_KEY, useStorage, load, MODELS, OR_MODELS, save, tokenize, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
 
 type View =
   | { name: "onboard" }
@@ -185,7 +185,10 @@ function render(): void {
     case "reader": {
       app.innerHTML = readerView();
       const ch = currentChapter();
-      if (ch) void loadArt(ch);
+      if (ch) {
+        void loadArt(ch);
+        void ensureGlossary(ch);
+      }
       break;
     }
   }
@@ -248,6 +251,10 @@ function keyField(full: boolean): string {
       <input name="orModel" list="or-models" value="${esc(s.orModel)}" autocomplete="off" spellcheck="false">
       <datalist id="or-models">${OR_MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join("")}</datalist>
       <small>Any model id from <a href="https://openrouter.ai/models" target="_blank" rel="noopener">openrouter.ai/models</a>. Default: ${OR_MODELS[0].id}.</small>
+    </label>
+    <label class="field">Word-meanings writer
+      <input name="orGlossModel" value="${esc(s.orGlossModel)}" autocomplete="off" spellcheck="false">
+      <small>A small, cheap model that writes each chapter's word list after the story. Default: ${GLOSSARY_MODEL}.</small>
     </label>`
           : `<label class="field">Story writer
       <select name="model">${MODELS.map((m) => `<option value="${m.id}" ${m.id === s.model ? "selected" : ""}>${m.label}</option>`).join("")}</select>
@@ -565,7 +572,7 @@ function readerView(): string {
     <div class="reader-tools">
       <button class="btn small" data-act="player-open">${icon("volume", 18)} Listen sentence by sentence</button>
     </div>
-    <p class="hint">Tap a word for its meaning. Try to guess first.</p>
+    <p class="hint" id="gloss-status">${glossHint(ch)}</p>
     <article class="text">
       ${ch.paragraphs.map((p, pi) => `<p>${p.map((_, si) => sentenceHtml(ch, pi, si)).join("")}</p>`).join("")}
     </article>
@@ -793,6 +800,60 @@ async function illustrate(series: Series, ch: Chapter): Promise<void> {
   }
 }
 
+// ---------- word glossary (arrives a little after the story) ----------
+
+const READY_HINT = "Tap a word for its meaning. Try to guess first.";
+const glossing = new Map<string, Promise<void>>();
+
+function glossHint(ch: Chapter): string {
+  return ch.glossaryPending && canGenerate() ? "You can start reading. Word meanings will be ready in a moment…" : READY_HINT;
+}
+
+function chapterById(id: string): Chapter | undefined {
+  for (const s of state.series) for (const c of s.chapters) if (c.id === id) return c;
+  return undefined;
+}
+
+/**
+ * Makes sure a chapter gets its glossary. With a personal key the app asks the glossary model
+ * itself; in account mode the server is already writing it and the app waits for it to sync
+ * (and for the illustration, which follows it).
+ */
+function ensureGlossary(ch: Chapter): Promise<void> {
+  if (!ch.glossaryPending || !canGenerate()) return Promise.resolve();
+  const running = glossing.get(ch.id);
+  if (running) return running;
+  const id = ch.id;
+  const work = (async () => {
+    if (!inCloud()) {
+      await generateGlossary(state, ch);
+      save(state);
+      return;
+    }
+    const waitsForArt = () => state.settings.illustrations && !chapterById(id)?.hasImage;
+    for (let i = 0; i < 60 && inCloud(); i++) {
+      await new Promise((r) => setTimeout(r, i < 20 ? 3000 : 6000));
+      await cloud.pull(state).catch(() => false);
+      save(state);
+      const now = chapterById(id);
+      if (!now) return;
+      if (now.hasImage && currentChapter()?.id === id) void loadArt(now);
+      if (!now.glossaryPending && !(waitsForArt() && i < 30)) return;
+      // The server's own attempt seems to have failed: ask it to write the glossary now.
+      if (now.glossaryPending && i === 20) await cloud.api(`/api/chapters/${id}/glossary`, "POST").catch(() => undefined);
+    }
+  })()
+    .catch(() => undefined) // stays pending; tried again when the chapter is next opened
+    .finally(() => {
+      glossing.delete(id);
+      const el = document.getElementById("gloss-status");
+      const now = chapterById(id);
+      if (el && now && currentChapter()?.id === id) el.textContent = glossHint(now).replace("will be ready in a moment…", now.glossaryPending ? "are not ready yet — tap a word to look it up." : "");
+    });
+  glossing.set(id, work);
+  return work;
+}
+
 // ---------- word sheet ----------
 
 interface DictState {
@@ -911,7 +972,7 @@ function sheetHtml(word: string, g: GlossEntry | null, status: string, showSente
 
 async function openWord(el: HTMLElement): Promise<void> {
   if (player.playing) playerPause(); // give the reader time to look the word up
-  const ch = currentChapter();
+  let ch = currentChapter();
   const sEl = el.closest<HTMLElement>(".s");
   if (!ch || !sEl) return;
   const sid = sEl.dataset.sid!;
@@ -928,6 +989,16 @@ async function openWord(el: HTMLElement): Promise<void> {
   let g: GlossEntry | null = ch.glossary[key] ?? null;
   sheet.innerHTML = sheetHtml(word, g, canGenerate() ? "Looking up…" : "No translation saved for this word. Add an API key in Settings to look it up.", peeked);
   sheet.classList.add("open");
+
+  // A brand-new chapter: its word meanings are seconds away, so wait for them rather than
+  // paying for a separate lookup.
+  if (!g && ch.glossaryPending && canGenerate()) {
+    await ensureGlossary(ch);
+    ch = currentChapter(); // account mode replaces the chapter object when it syncs
+    if (!ch || sheetCtx !== ctx) return;
+    g = ch.glossary[key] ?? null;
+    if (g) sheet.innerHTML = sheetHtml(word, g, "", peeked);
+  }
 
   if (!g && canGenerate()) {
     try {
@@ -1222,6 +1293,11 @@ document.addEventListener("click", (ev) => {
       const series = currentSeries();
       const ch = currentChapter();
       if (!series || !ch || view.name !== "reader") break;
+      if (ch.glossaryPending && glossing.has(ch.id)) {
+        // The words read are counted from the glossary, so it has to be there first.
+        toast("One moment — the word meanings are still being prepared.");
+        break;
+      }
       lastResult = { chapterId: ch.id, result: finishChapter(state, ch, d.fb as Feedback) };
       persist();
       document.getElementById("end")!.innerHTML = endHtml(series, ch, view.idx);
@@ -1284,6 +1360,7 @@ document.addEventListener("submit", (ev) => {
     if (form.dataset.form === "settings") {
       if (f.has("model")) s.model = text("model") || s.model;
       if (f.has("orModel")) s.orModel = text("orModel") || OR_MODELS[0].id;
+      if (f.has("orGlossModel")) s.orGlossModel = text("orGlossModel") || GLOSSARY_MODEL;
       s.fontSize = Number(f.get("fontSize")) || s.fontSize;
       s.illustrations = f.has("illustrations");
       if (f.has("imageModel")) s.imageModel = text("imageModel") || IMAGE_MODELS[0].id;

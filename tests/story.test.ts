@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyChapter, buildPrompt, illustrationPrompt, parseJson, toChapter } from "../src/story";
-import { chapter, payload, series, state } from "./helpers";
+import { applyChapter, applyGlossary, buildPrompt, chapterForms, CHAPTER_SCHEMA, glossaryPrompt, illustrationPrompt, parseJson, SYSTEM, toChapter } from "../src/story";
+import { chapter, glossaryAnswer, payload, series, state } from "./helpers";
 
 const plan = { truth: "The keeper is her brother.", ending: "They reunite.", beats: ["Beat A", "Beat B", "Beat C"], start: 0 };
 const ch = (id: string) => chapter(id, ["Aino katsoo ovea."], ["*Aino=Aino", "katsoo=katsoa", "ovea=ovi"], { recap: `Recap ${id}` });
@@ -90,12 +90,12 @@ describe("buildPrompt", () => {
 });
 
 describe("toChapter", () => {
-  it("builds a chapter and cleans punctuation off glossary forms", () => {
+  it("builds a chapter that still waits for its glossary", () => {
     const c = toChapter(payload(), 1.25);
     expect(c.title).toBe("Kirje");
     expect(c.level).toBe(1.25);
-    expect(Object.keys(c.glossary)).toEqual(["liisa", "löytää", "kirjeen"]);
-    expect(c.glossary.liisa.name).toBe(true);
+    expect(c.glossary).toEqual({});
+    expect(c.glossaryPending).toBe(true);
     expect(c.recap).toBe("Liisa found a letter.");
     expect(c.finished).toBe(false);
   });
@@ -107,6 +107,45 @@ describe("toChapter", () => {
 
   it("rejects an empty story", () => {
     expect(() => toChapter(payload({ paragraphs: [[{ fi: " ", tr: "" }]] }), 1)).toThrow();
+  });
+});
+
+describe("glossary (written by a second, cheaper model)", () => {
+  it("keeps the glossary out of the story model's job", () => {
+    expect(CHAPTER_SCHEMA.required).not.toContain("glossary");
+    expect(Object.keys(CHAPTER_SCHEMA.properties)).not.toContain("glossary");
+    expect(SYSTEM).not.toContain("- glossary:");
+  });
+
+  it("lists every distinct word form for the glossary model", () => {
+    const c = toChapter(payload({ paragraphs: [[{ fi: "Liisa löytää kirjeen.", tr: "" }, { fi: "Kirjeen löytää Liisa!", tr: "" }]] }), 1);
+    expect(chapterForms(c)).toEqual(["liisa", "löytää", "kirjeen"]);
+    const prompt = glossaryPrompt(c, "English");
+    expect(prompt).toContain("Translation language: English.");
+    expect(prompt).toContain("WORD FORMS (3)\nliisa\nlöytää\nkirjeen");
+  });
+
+  it("stores the answer, cleaning punctuation off forms", () => {
+    const c = toChapter(payload(), 1);
+    expect(applyGlossary(c, glossaryAnswer)).toBe(true);
+    expect(Object.keys(c.glossary).sort()).toEqual(["kirjeen", "liisa", "löytää"]);
+    expect(c.glossary.liisa.name).toBe(true);
+    expect(c.glossaryPending).toBe(false);
+  });
+
+  it("keeps entries the reader already looked up", () => {
+    const c = toChapter(payload(), 1);
+    c.glossary.kirjeen = { lemma: "kirje", tr: "my own lookup", note: "" };
+    applyGlossary(c, glossaryAnswer);
+    expect(c.glossary.kirjeen.tr).toBe("my own lookup");
+  });
+
+  it("rejects an unusable or badly incomplete answer and stays pending", () => {
+    const c = toChapter(payload(), 1);
+    expect(applyGlossary(c, "sorry, I cannot")).toBe(false);
+    expect(applyGlossary(c, JSON.stringify({ glossary: [{ form: "liisa", lemma: "Liisa", tr: "Liisa", note: "", name: true }] }))).toBe(false);
+    expect(c.glossaryPending).toBe(true);
+    expect(c.glossary).toEqual({});
   });
 });
 

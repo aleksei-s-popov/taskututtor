@@ -8,7 +8,11 @@ import { verifyToken } from "@clerk/backend";
 import type { Chapter, Series } from "../../src/store";
 import {
   applyChapter,
+  applyGlossary,
   buildPrompt,
+  GLOSSARY_SCHEMA,
+  GLOSSARY_SYSTEM,
+  glossaryPrompt,
   CHAPTER_SCHEMA,
   DICT_SCHEMA,
   dictQuestion,
@@ -125,12 +129,12 @@ async function openRouter(env: Env, path: string, body: Record<string, unknown>)
   return json;
 }
 
-async function askJson(env: Env, model: string, name: string, schema: Record<string, unknown>, question: string): Promise<string> {
+async function askJson(env: Env, model: string, name: string, schema: Record<string, unknown>, question: string, system?: string): Promise<string> {
   const json = await openRouter(env, "/chat/completions", {
     model,
     reasoning: { effort: "low" },
     response_format: { type: "json_schema", json_schema: { name, strict: true, schema } },
-    messages: [{ role: "user", content: question }],
+    messages: [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: question }],
   });
   return String(json?.choices?.[0]?.message?.content ?? "");
 }
@@ -184,7 +188,17 @@ interface JobInput {
   fromSeriesId?: string;
 }
 
-async function writeChapter(env: Env, user: string, input: JobInput): Promise<{ seriesId: string; chapterId: string }> {
+interface Written {
+  seriesId: string;
+  chapterId: string;
+  series: Series;
+  chapter: Chapter;
+  lang: string;
+  illustrations: boolean;
+}
+
+/** Writes and saves the story of one chapter. Its glossary and picture follow in finishChapter. */
+async function writeChapter(env: Env, user: string, input: JobInput): Promise<Written> {
   const [profile, library] = await Promise.all([loadProfile(env, user), loadLibrary(env, user)]);
   const state: PromptState = { settings: profile.data, words: profile.data.words ?? {}, series: library };
 
@@ -204,14 +218,14 @@ async function writeChapter(env: Env, user: string, input: JobInput): Promise<{ 
   const choice = json?.choices?.[0];
   if (choice?.finish_reason === "length") throw new Error("The chapter came out too long and was cut off. Please try again.");
   const payload = parseJson<ChapterPayload>(String(choice?.message?.content ?? ""));
-  if (!payload || !Array.isArray(payload.paragraphs) || !Array.isArray(payload.glossary)) throw new Error("The story came back in an unexpected format. Please try again.");
+  if (!payload || !Array.isArray(payload.paragraphs)) throw new Error("The story came back in an unexpected format. Please try again.");
 
   const chapter = toChapter(payload, profile.data.level);
   const series = applyChapter(existing ?? null, chapter, payload, req);
   const now = Date.now();
   const idx = series.chapters.length - 1;
 
-  // Save the chapter first: a failed picture must never cost the reader their chapter.
+  // Save the story straight away: the reader can start it while the glossary and picture are made.
   await env.DB.batch([
     env.DB.prepare(
       "INSERT INTO series (id, user_id, data, deleted, updated_at) VALUES (?, ?, ?, 0, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
@@ -227,20 +241,44 @@ async function writeChapter(env: Env, user: string, input: JobInput): Promise<{ 
     ),
   ]);
 
-  if (profile.data.illustrations) {
+  return { seriesId: series.id, chapterId: chapter.id, series, chapter, lang: profile.data.lang, illustrations: profile.data.illustrations };
+}
+
+/**
+ * Writes a chapter's word glossary with the cheap glossary model and stores it. Only the glossary
+ * fields are touched: the reader may already be reading the chapter on a device.
+ */
+async function writeGlossary(env: Env, user: string, chapter: Chapter, lang: string): Promise<boolean> {
+  for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      if (await illustrate(env, user, series, chapter)) {
-        chapter.hasImage = true;
-        // Only this flag: the reader may already have started the chapter on another device.
-        await env.DB.prepare("UPDATE chapters SET data = json_set(data, '$.hasImage', json('true')), updated_at = ? WHERE id = ? AND user_id = ?")
-          .bind(Date.now(), chapter.id, user)
-          .run();
-      }
+      const answer = await askJson(env, env.GLOSSARY_MODEL, "glossary", GLOSSARY_SCHEMA, glossaryPrompt(chapter, lang), GLOSSARY_SYSTEM);
+      if (!applyGlossary(chapter, answer)) continue;
+      await env.DB.prepare(
+        "UPDATE chapters SET data = json_set(data, '$.glossary', json_patch(json(?), json_extract(data, '$.glossary')), '$.glossaryPending', json('false')), updated_at = ? WHERE id = ? AND user_id = ?",
+      )
+        .bind(JSON.stringify(chapter.glossary), Date.now(), chapter.id, user)
+        .run();
+      return true;
     } catch (e) {
-      console.log("illustration failed", e instanceof Error ? e.message : e);
+      console.log("glossary failed", e instanceof Error ? e.message : e);
     }
   }
-  return { seriesId: series.id, chapterId: chapter.id };
+  return false;
+}
+
+/** After the story is saved: the glossary, then (if the reader wants pictures) the illustration. */
+async function finishChapter(env: Env, user: string, made: Written): Promise<void> {
+  await writeGlossary(env, user, made.chapter, made.lang);
+  if (!made.illustrations) return;
+  try {
+    if (await illustrate(env, user, made.series, made.chapter)) {
+      await env.DB.prepare("UPDATE chapters SET data = json_set(data, '$.hasImage', json('true')), updated_at = ? WHERE id = ? AND user_id = ?")
+        .bind(Date.now(), made.chapter.id, user)
+        .run();
+    }
+  } catch (e) {
+    console.log("illustration failed", e instanceof Error ? e.message : e);
+  }
 }
 
 async function runJob(env: Env, jobId: string): Promise<void> {
@@ -252,8 +290,10 @@ async function runJob(env: Env, jobId: string): Promise<void> {
       .run();
   await set("running");
   try {
-    const done = await writeChapter(env, job.user_id, JSON.parse(job.input) as JobInput);
-    await set("done", done);
+    const made = await writeChapter(env, job.user_id, JSON.parse(job.input) as JobInput);
+    // The job is done as soon as the story can be read; the rest arrives through sync.
+    await set("done", { seriesId: made.seriesId, chapterId: made.chapterId });
+    await finishChapter(env, job.user_id, made);
   } catch (e) {
     await set("error", { error: e instanceof Error ? e.message : "Something went wrong while writing the chapter." });
   }
@@ -326,7 +366,10 @@ async function route(req: Request, env: Env): Promise<Response> {
     if (!row) throw new HttpError(404, "Chapter not found.");
     const chapter = JSON.parse(row.data) as Record<string, unknown>;
     const patch = await body<Record<string, unknown>>();
-    for (const f of PROGRESS_FIELDS) if (f in patch) chapter[f] = patch[f];
+    for (const f of PROGRESS_FIELDS) if (f in patch && f !== "glossary") chapter[f] = patch[f];
+    // Glossary entries are only ever added from the app (single-word lookups), never removed:
+    // a device that has not received the server-written glossary yet must not wipe it.
+    if (patch.glossary && typeof patch.glossary === "object") chapter.glossary = { ...(chapter.glossary as object), ...(patch.glossary as object) };
     const now = Date.now();
     await env.DB.prepare("UPDATE chapters SET data = ?, updated_at = ? WHERE id = ? AND user_id = ?").bind(JSON.stringify(chapter), now, hit[1], user).run();
     return Response.json({ updatedAt: now });
@@ -369,6 +412,18 @@ async function route(req: Request, env: Env): Promise<Response> {
     if (!series || !chapter) throw new HttpError(404, "Chapter not found.");
     if (!(await illustrate(env, user, series, chapter))) throw new HttpError(502, "The image model returned no picture. Try again.");
     await env.DB.prepare("UPDATE chapters SET data = json_set(data, '$.hasImage', json('true')), updated_at = ? WHERE id = ? AND user_id = ?").bind(Date.now(), chapter.id, user).run();
+    return Response.json({ ok: true });
+  }
+
+  // Writes a chapter's glossary if it is still missing (the background attempt failed).
+  if ((hit = m("POST", /^\/api\/chapters\/([\w-]+)\/glossary$/))) {
+    const row = await env.DB.prepare("SELECT data FROM chapters WHERE id = ? AND user_id = ?").bind(hit[1], user).first<{ data: string }>();
+    if (!row) throw new HttpError(404, "Chapter not found.");
+    const chapter = JSON.parse(row.data) as Chapter;
+    if (chapter.glossaryPending) {
+      const profile = await loadProfile(env, user);
+      if (!(await writeGlossary(env, user, chapter, profile.data.lang))) throw new HttpError(502, "The word meanings could not be prepared. Try again in a moment.");
+    }
     return Response.json({ ok: true });
   }
 

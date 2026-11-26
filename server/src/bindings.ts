@@ -45,6 +45,7 @@ export interface Env {
   CLERK_JWT_KEY?: string;
   STORY_MODEL: string;
   LOOKUP_MODEL: string;
+  GLOSSARY_MODEL: string;
   IMAGE_MODEL: string;
   DAILY_CHAPTER_LIMIT: string;
   ALLOWED_ORIGINS: string;

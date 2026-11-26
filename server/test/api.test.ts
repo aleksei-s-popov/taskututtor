@@ -36,7 +36,12 @@ function startMock(): Promise<number> {
       const name = body.response_format?.json_schema?.name;
       let content: unknown;
       if (name === "word") content = { lemma: "kirje", tr: "letter", note: "accusative", name: false };
-      else if (name === "entry") content = { entries: [{ pos: "noun", senses: [{ def: "letter", examples: [] }] }] };
+      else if (name === "glossary") {
+        // One entry per word form the Worker listed, like a real glossary model.
+        const forms: string[] = body.messages[1].content.split(/WORD FORMS \(\d+\)\n/)[1].split("\n");
+        asked.push({ kind: "glossary", prompt: body.model });
+        content = { glossary: forms.map((form) => ({ form, lemma: form, tr: `tr:${form}`, note: "", name: form === "liisa" })) };
+      } else if (name === "entry") content = { entries: [{ pos: "noun", senses: [{ def: "letter", examples: [] }] }] };
       else {
         n++;
         const prompt: string = body.messages[1].content;
@@ -47,10 +52,6 @@ function startMock(): Promise<number> {
           chapter_title: `Luku ${n}`,
           chapter_title_tr: `Chapter ${n}`,
           paragraphs: [[{ fi: "Liisa löytää kirjeen.", tr: "Liisa finds a letter." }]],
-          glossary: [
-            { form: "liisa", lemma: "Liisa", tr: "Liisa", note: "", name: true },
-            { form: "löytää", lemma: "löytää", tr: "finds", note: "", name: false },
-          ],
           story_so_far: `Canon ${n}`,
           art_bible: "Gouache.",
           illustration_scene: "scene",
@@ -83,7 +84,21 @@ async function finished(user: string, jobId: string) {
   throw new Error("job did not finish");
 }
 
-const write = async (user: string, path: string, body?: unknown) => finished(user, (await call(user, "POST", path, body)).json.jobId);
+/** Waits until a chapter's glossary (and picture, if wanted) has arrived after its story. */
+async function settled(user: string, chapterId: string, picture = true) {
+  for (let i = 0; i < 100; i++) {
+    const ch = (await call(user, "GET", "/state")).json.chapters.find((c: any) => c.id === chapterId)?.data;
+    if (ch && !ch.glossaryPending && (!picture || ch.hasImage)) return ch;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error("chapter did not settle");
+}
+
+const write = async (user: string, path: string, body?: unknown) => {
+  const job = await finished(user, (await call(user, "POST", path, body)).json.jobId);
+  if (job.status === "done") await settled(user, job.chapterId);
+  return job;
+};
 
 beforeAll(async () => {
   const mockPort = await startMock();
@@ -146,13 +161,19 @@ describe("account API", () => {
     expect(image.res.headers.get("content-type")).toBe("image/png");
     // The reader's level reached the writer, and the first picture had nothing to match.
     expect(asked[0].prompt).toContain("Reader's level: 2.25");
-    expect(asked[1]).toMatchObject({ kind: "image", reference: false });
+    // The glossary came from the cheap glossary model, after the story, and covers every word.
+    expect(asked[1]).toMatchObject({ kind: "glossary", prompt: "openai/gpt-6-luna" });
+    expect(Object.keys(json.chapters[0].data.glossary).sort()).toEqual(["kirjeen", "liisa", "löytää"]);
+    expect(json.chapters[0].data.glossaryPending).toBe(false);
+    expect(asked[2]).toMatchObject({ kind: "image", reference: false });
   });
 
   it("saves reading progress but never lets the app rewrite the story", async () => {
-    await call("alice", "PUT", `/chapters/${chapterId}`, { finished: true, feedback: "hard", lookedUp: ["kirje"], title: "HACKED" });
+    // A device that has not received the glossary yet sends an empty one, plus one word it looked up itself.
+    await call("alice", "PUT", `/chapters/${chapterId}`, { finished: true, feedback: "hard", lookedUp: ["kirje"], title: "HACKED", glossary: { uusi: { lemma: "uusi", tr: "new", note: "" } }, glossaryPending: true });
     const ch = (await call("alice", "GET", "/state")).json.chapters[0].data;
-    expect(ch).toMatchObject({ finished: true, feedback: "hard", lookedUp: ["kirje"], title: "Luku 1" });
+    expect(ch).toMatchObject({ finished: true, feedback: "hard", lookedUp: ["kirje"], title: "Luku 1", glossaryPending: false });
+    expect(Object.keys(ch.glossary).sort()).toEqual(["kirjeen", "liisa", "löytää", "uusi"]);
   });
 
   it("continues a series along its plan, using the reader's feedback and an earlier picture", async () => {
@@ -200,6 +221,19 @@ describe("account API", () => {
     expect(json.series).toMatchObject([{ id: seriesId, deleted: true }]);
     expect(json.chapters).toEqual([]);
     expect((await call("alice", "GET", `/images/${chapterId}`)).status).toBe(404);
+  });
+
+  it("lets the reader start a chapter before its glossary exists", async () => {
+    await call("dora", "PUT", "/profile", { level: 1, lang: "English", interests: "", yki: false, illustrations: false, words: {} });
+    const job = await finished("dora", (await call("dora", "POST", "/series", { genre: "Mystery" })).json.jobId);
+    expect(job.status).toBe("done");
+    // The job reports done as soon as the story is saved; the chapter is readable at that moment.
+    const early = (await call("dora", "GET", "/state")).json.chapters.find((c: any) => c.id === job.chapterId).data;
+    expect(early.paragraphs[0][0].fi).toBe("Liisa löytää kirjeen.");
+    const later = await settled("dora", job.chapterId, false);
+    expect(Object.keys(later.glossary)).toHaveLength(3);
+    // Asking for a glossary that already exists does nothing.
+    expect((await call("dora", "POST", `/chapters/${job.chapterId}/glossary`)).status).toBe(200);
   });
 
   it("reports a failed chapter instead of losing the request", async () => {

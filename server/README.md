@@ -60,6 +60,7 @@ npx wrangler login
 | Variable | Meaning |
 |---|---|
 | `STORY_MODEL` | OpenRouter model that writes chapters |
+| `GLOSSARY_MODEL` | cheap model that writes each chapter's word glossary after the story |
 | `LOOKUP_MODEL` | cheaper model for single-word lookups and dictionary entries |
 | `IMAGE_MODEL` | model that paints illustrations |
 | `DAILY_CHAPTER_LIMIT` | new chapters one reader may request per day (UTC) |
@@ -125,6 +126,7 @@ All routes need `Authorization: Bearer <Clerk session token>`.
 | `DELETE /api/series/:id` | delete a series, its chapters and pictures |
 | `GET /api/images/:chapterId` | a chapter's illustration |
 | `POST /api/chapters/:id/illustrate` | paint or repaint an illustration |
+| `POST /api/chapters/:id/glossary` | write a chapter's glossary if it is still missing |
 | `POST /api/lookup`, `POST /api/dict` | AI word lookup and dictionary entry |
 
 Sync is last-write-wins per document: fine for one reader moving between devices, not built

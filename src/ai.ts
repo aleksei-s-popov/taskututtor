@@ -5,8 +5,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { DictCard } from "./dict";
 import { formKey, tokenize, type Chapter, type GlossEntry, type Series, type State } from "./store";
 import {
+  applyGlossary,
   buildPrompt,
   CHAPTER_SCHEMA,
+  GLOSSARY_SCHEMA,
+  GLOSSARY_SYSTEM,
+  glossaryPrompt,
   DICT_SCHEMA,
   dictQuestion,
   illustrationPrompt,
@@ -22,6 +26,9 @@ import {
 } from "./story";
 
 export type { NewSeriesRequest };
+
+/** With an Anthropic key, glossaries are written by the small, cheap model. */
+const ANTHROPIC_GLOSSARY_MODEL = "claude-haiku-5-5";
 
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
@@ -60,7 +67,7 @@ export function generateChapter(
   const run = state.settings.provider === "openrouter" ? openRouterText(state, prompt, onProgress) : anthropicText(state, prompt, onProgress);
   const promise = run.promise.then((text) => {
     const payload = parseJson<ChapterPayload>(text);
-    if (!payload || !Array.isArray(payload.paragraphs) || !Array.isArray(payload.glossary))
+    if (!payload || !Array.isArray(payload.paragraphs))
       throw new Error("The story came back in an unexpected format. Please try again.");
     return { chapter: toChapter(payload, level), payload };
   });
@@ -220,6 +227,46 @@ async function anthropicLookup(state: State, question: string, schema: Record<st
   });
   if (msg.stop_reason === "refusal") throw new Error("Couldn't look that word up.");
   return msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+}
+
+/**
+ * Writes the word glossary of a chapter with the cheaper glossary model and stores it on the
+ * chapter. Runs after the story is already on screen.
+ */
+export async function generateGlossary(state: State, ch: Chapter): Promise<void> {
+  const prompt = glossaryPrompt(ch, state.settings.lang);
+  let text: string;
+  if (state.settings.provider === "openrouter") {
+    const res = await openRouterRequest(
+      state,
+      {
+        reasoning: { effort: "low" },
+        response_format: { type: "json_schema", json_schema: { name: "glossary", strict: true, schema: GLOSSARY_SCHEMA } },
+        messages: [
+          { role: "system", content: GLOSSARY_SYSTEM },
+          { role: "user", content: prompt },
+        ],
+      },
+      undefined,
+      OPENROUTER_URL,
+      state.settings.orGlossModel || state.settings.orModel,
+    );
+    const json = await res.json().catch(() => null);
+    text = String(json?.choices?.[0]?.message?.content ?? "");
+  } else {
+    // Long chapters have long glossaries: stream so the request cannot time out.
+    const msg = await client(state)
+      .messages.stream({
+        model: ANTHROPIC_GLOSSARY_MODEL,
+        max_tokens: 64000,
+        system: GLOSSARY_SYSTEM,
+        output_config: { effort: "low", format: { type: "json_schema", schema: GLOSSARY_SCHEMA } },
+        messages: [{ role: "user", content: prompt }],
+      })
+      .finalMessage();
+    text = msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+  }
+  if (!applyGlossary(ch, text)) throw new Error("The word meanings could not be prepared. They will be tried again.");
 }
 
 /** Share of the chapter's word tokens that have a glossary entry (sanity check for the UI). */

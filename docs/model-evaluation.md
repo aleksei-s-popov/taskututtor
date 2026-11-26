@@ -51,6 +51,40 @@ Findings:
   run slower. Small open models (27B class) are not usable for Finnish at beginner level.
 - Tencent Hy4, Cohere Command A+ and Xiaomi MiMo Pro timed out on every attempt.
 
+## Splitting the work between two models
+
+More than half of what a writer produces per chapter is the word glossary, not the story. Two
+ways of mixing models were tested on the same story.
+
+**Story by one model, glossary by a cheaper one (adopted).** GPT-6.1 Terra wrote three chapters
+(A1, A2, about B1) without a glossary; four cheap models each wrote the glossary from a list of
+the chapter's distinct word forms.
+
+| Glossary by | Glossary accuracy | Glossary cost | Whole chapter | Whole chapter time |
+|---|---|---|---|---|
+| Terra itself (one call) | 8.5–9 | included | $0.040 | about 120 s |
+| **GPT-6 Luna** (default) | 8.3 | $0.003 | **$0.023** | 85 s |
+| DeepSeek V4.1 Flash | 9.0 | $0.012 | $0.033 | 140 s |
+| Gemini 3.1 Flash Lite | 8.3 | $0.015 | $0.035 | 78 s |
+| Claude Haiku 5.5 | 7.3 | $0.007 | $0.027 | 99 s |
+
+Story quality was unchanged, the chapter costs about 40% less, and because the word list comes
+from code, every word gets an entry (100% coverage in all twelve runs, against 96–100% when the
+writer chose what to include). The story is also readable after about a minute, before the
+glossary exists, which is how the app now shows it.
+
+**Strong model starts, cheap model continues (not adopted).** Terra wrote chapter 1 and the plot
+plan; a cheaper model wrote chapters 2 and 3.
+
+| Setup | Follows plan | Consistency | Plot moves | Repeated events | Cost per later chapter |
+|---|---|---|---|---|---|
+| Terra throughout | 9 | 8 | 9 | 0 | $0.036 |
+| Terra, then DeepSeek V4.1 Flash | 8 | 6 | 8 | 2 | $0.012 |
+| Terra, then GPT-6 Luna | 8 | 6 | 8 | 2 | $0.007 |
+
+A good plan lifts the cheaper models, but small contradictions creep in (a date that changes, a
+key found twice). Cheaper, at a cost in exactly the consistency readers notice.
+
 ## Illustration models
 
 | Model | Cost / picture | Result |
@@ -82,6 +116,7 @@ Findings:
 | Setup | Per month |
 |---|---|
 | Previous defaults: Claude Sonnet 5.5 + Nano Banana 2.1 | about $19 |
-| Current defaults: GPT-6.1 Terra + MAI Image 2.7 Flash | about $7.50 |
+| GPT-6.1 Terra writing story and glossary + MAI Image 2.7 Flash | about $7.50 |
+| **Current defaults: GPT-6.1 Terra story + GPT-6 Luna glossary + MAI Image 2.7 Flash** | **about $5** |
 | Open-weight writer: DeepSeek V4.1 Flash + MAI Image 2.7 Flash | about $3.70 |
 | Cheapest tested: GPT-6 Luna + Flux 3 Klein | about $2.10 |

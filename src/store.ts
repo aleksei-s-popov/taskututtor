@@ -28,6 +28,8 @@ export interface Chapter {
   paragraphs: Sentence[][];
   /** keyed by lowercased word form exactly as it appears in the text */
   glossary: Record<string, GlossEntry>;
+  /** the story is ready but its word glossary is still being written */
+  glossaryPending?: boolean;
   /** level the chapter was written for */
   level: number;
   /** lemmas the reader looked up */
@@ -100,6 +102,8 @@ export interface Settings {
   /** OpenRouter key + model */
   orKey: string;
   orModel: string;
+  /** OpenRouter model that writes each chapter's word glossary (a cheap one does this well) */
+  orGlossModel: string;
   /** Anthropic key + model */
   apiKey: string;
   model: string;
@@ -154,6 +158,9 @@ export const OR_MODELS = [
   { id: "anthropic/claude-opus-5.5", label: "Claude Opus 5.5 — priciest" },
 ];
 
+/** Default model for word glossaries: see docs/model-evaluation.md. */
+export const GLOSSARY_MODEL = "openai/gpt-6-luna";
+
 /** OpenRouter image models (suggestions only). */
 export const IMAGE_MODELS = [
   { id: "microsoft/mai-image-2.7-flash", label: "MAI Image 2.7 Flash — good and cheap (default)" },
@@ -179,6 +186,7 @@ function defaults(): State {
       provider: "openrouter",
       orKey: "",
       orModel: OR_MODELS[0].id,
+      orGlossModel: GLOSSARY_MODEL,
       apiKey: "",
       model: MODELS[0].id,
       lang: "English",

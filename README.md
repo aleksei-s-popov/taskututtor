@@ -12,7 +12,8 @@ hard-to-put-down stories in Finnish at your level — and a little above it.
 
 Stories are written by an AI model using **your own API key**. The default provider is
 [OpenRouter](https://openrouter.ai/keys); the default models (`openai/gpt-6.1-terra` for stories,
-`microsoft/mai-image-2.7-flash` for pictures) were picked by testing — see
+`openai/gpt-6-luna` for each chapter's word meanings, `microsoft/mai-image-2.7-flash` for pictures)
+were picked by testing — see
 [docs/model-evaluation.md](docs/model-evaluation.md) — and any OpenRouter model id works. The
 Anthropic API can be used directly instead. The key, your stories and your progress are stored only
 in your browser; the key is sent only to the provider you chose.
@@ -34,6 +35,9 @@ in your browser; the key is sent only to the provider you chose.
   adventure with the characters of an earlier series, kept consistent with what happened there.
 - **Start a series:** tap **＋ New series**, pick a genre, optionally describe your own idea, and tap
   **Write chapter 1**. Writing a chapter takes about a minute.
+- **Story first:** a new chapter opens as soon as its story is written. The word meanings are
+  written right after by a second, cheaper model and arrive a few seconds later; if you tap a word
+  before then, the panel waits for them.
 - **Read:** try to understand from context first. Tap a word when you're stuck — you'll see its
   meaning, dictionary form and a short grammar hint. From that panel you can also
   **Translate sentence**, **Listen** to the sentence, or tap **I know this word** if you tapped by accident.

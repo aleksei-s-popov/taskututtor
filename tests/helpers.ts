@@ -59,11 +59,6 @@ export function payload(extra: Partial<ChapterPayload> = {}): ChapterPayload {
     chapter_title: "Kirje",
     chapter_title_tr: "The Letter",
     paragraphs: [[{ fi: "Liisa löytää kirjeen.", tr: "Liisa finds a letter." }]],
-    glossary: [
-      { form: "liisa", lemma: "Liisa", tr: "Liisa", note: "", name: true },
-      { form: "löytää", lemma: "löytää", tr: "finds", note: "", name: false },
-      { form: "kirjeen.", lemma: "kirje", tr: "letter", note: "accusative", name: false },
-    ],
     story_so_far: "Liisa found a letter.",
     art_bible: "Gouache. Liisa: red braid.",
     illustration_scene: "Liisa with a letter.",
@@ -73,3 +68,12 @@ export function payload(extra: Partial<ChapterPayload> = {}): ChapterPayload {
     ...extra,
   };
 }
+
+/** A glossary model's answer for the payload() chapter. */
+export const glossaryAnswer = JSON.stringify({
+  glossary: [
+    { form: "liisa", lemma: "Liisa", tr: "Liisa", note: "", name: true },
+    { form: "löytää", lemma: "löytää", tr: "finds", note: "", name: false },
+    { form: "kirjeen.", lemma: "kirje", tr: "letter", note: "object form (genitive) of kirje", name: false },
+  ],
+});
