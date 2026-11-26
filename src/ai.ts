@@ -4,7 +4,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { cefr, learningWords } from "./adapt";
 import type { DictCard } from "./dict";
-import { formKey, tokenize, uid, type Chapter, type GlossEntry, type Series, type State } from "./store";
+import { formKey, seriesNames, tokenize, uid, type Chapter, type GlossEntry, type Series, type State } from "./store";
 
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
@@ -162,6 +162,8 @@ interface ChapterPayload {
 export interface NewSeriesRequest {
   genre: string;
   idea: string;
+  /** an earlier series whose world and characters the new story should share */
+  from?: Series;
 }
 
 function buildPrompt(state: State, series: Series | null, req: NewSeriesRequest | null): string {
@@ -242,6 +244,25 @@ function buildPrompt(state: State, series: Series | null, req: NewSeriesRequest 
     }
     lines.push(`Return series_title "${series.title}" and the same premise unchanged.`);
     lines.push(series.artBible ? `Existing art bible (return unchanged, only append new recurring characters/locations): ${series.artBible}` : "There is no art bible yet: write one that fits the story so far.");
+  } else if (req?.from) {
+    const src = req.from;
+    lines.push(
+      "",
+      `Start a NEW, separate story set in the same world as the reader's earlier series "${src.title}", and write its chapter 1. Genre: ${req.genre}.`,
+      req.idea.trim()
+        ? `The reader's wish for it (including which character to follow, if they say): ${req.idea.trim()}`
+        : "Follow one or more of its established characters — the protagonist, or a side character who deserves their own story.",
+      `Canon of "${src.title}" — everything here stays true; returning characters keep their personality, history and relationships: ${src.storySoFar}`,
+    );
+    if (src.plan) lines.push(`What was really going on in that series, and how it ended: ${src.plan.truth} ${src.plan.ending}`);
+    lines.push(
+      "This is a new adventure, not a retelling or a direct continuation of the old plot: a fresh central conflict, new places, new stakes, and at least one important new character. A reader who remembers the earlier series should recognise the characters and enjoy small callbacks; a reader who forgot it should still follow everything.",
+      "Give it its own series title and premise.",
+      "Create the secret plan for a complete story of 9–12 chapters: the truth behind it, the ending, and one beat per chapter (beat 1 is this chapter). Vary locations and kinds of events across the beats; put a major reveal or reversal around the middle.",
+      src.artBible
+        ? `Art bible of the earlier series — keep its style and the exact looks of returning characters, and add the new characters and locations: ${src.artBible}`
+        : "",
+    );
   } else if (req) {
     lines.push(
       "",
@@ -250,10 +271,16 @@ function buildPrompt(state: State, series: Series | null, req: NewSeriesRequest 
       "Set it somewhere that lets Finnish life and culture show through when that fits the genre.",
       "Create the secret plan for a complete story of 9–12 chapters: the truth behind it, the ending, and one beat per chapter (beat 1 is this chapter). Vary locations and kinds of events across the beats; put a major reveal or reversal around the middle.",
     );
-    const titles = state.series.map((s) => s.title);
-    if (titles.length) lines.push(`Make it different from the reader's existing series: ${titles.join("; ")}.`);
+    if (state.series.length) {
+      const used = [...new Set(state.series.flatMap((s) => seriesNames(s).slice(0, 8)))];
+      lines.push(
+        "This must be a completely different story from the reader's existing series, with an entirely new cast and world: a new protagonist who differs clearly in name, age, gender or occupation and personality, a different kind of setting (not the same city-flat setup again), and a different central idea.",
+        `Existing series: ${state.series.map((s) => `"${s.title}" — ${s.premise}`).join(" | ")}`,
+        used.length ? `Names of people and places from earlier series: ${used.join(", ")}. No character in the new story may have any of these names, and its main setting must be a different place.` : "",
+      );
+    }
   }
-  return lines.join("\n");
+  return lines.filter((l, i) => l || i === lines.indexOf("")).join("\n");
 }
 
 function toChapter(p: ChapterPayload, level: number): Chapter {

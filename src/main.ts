@@ -4,7 +4,7 @@ import { aiDictionaryCard, friendlyError, generateChapter, generateIllustration,
 import { cacheCard, cachedCard, wiktionaryCard, type DictCard } from "./dict";
 import { compress, deleteImage, getImage, putImage } from "./images";
 import { sampleSeries } from "./sample";
-import { activeKey, arcLength, formKey, IMAGE_MODELS, load, MODELS, OR_MODELS, save, tokenize, uid, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
+import { activeKey, arcLength, formKey, seriesNames, IMAGE_MODELS, load, MODELS, OR_MODELS, save, tokenize, uid, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
 
 type View =
   | { name: "onboard" }
@@ -252,12 +252,31 @@ function newSeriesView(): string {
   </header>
   <main class="page">
     <form data-form="new">
+      ${
+        state.series.length
+          ? `<h2>Who is it about?</h2>
+      <div class="choices">
+        <label class="choice">
+          <input type="radio" name="from" value="" checked>
+          <span><b>A completely new story</b><small>New characters, new world</small></span>
+        </label>
+        ${state.series
+          .map(
+            (s) => `<label class="choice">
+          <input type="radio" name="from" value="${s.id}">
+          <span><b>Characters from “${esc(s.title)}”</b><small>${esc(seriesNames(s).slice(0, 4).join(", ") || s.premise)} — a new adventure, consistent with that story</small></span>
+        </label>`,
+          )
+          .join("")}
+      </div>`
+          : ""
+      }
       <h2>Pick a genre</h2>
       <div class="chips">
         ${GENRES.map((g, i) => `<label class="chip"><input type="radio" name="genre" value="${g}" ${i === 0 ? "checked" : ""}><span>${g}</span></label>`).join("")}
       </div>
       <label class="field">Your own idea <span class="opt">optional</span>
-        <textarea name="idea" rows="3" placeholder="e.g. a lighthouse keeper in Lapland who finds a letter addressed to her dead brother"></textarea>
+        <textarea name="idea" rows="3" placeholder="e.g. a lighthouse keeper in Lapland who finds a letter addressed to her dead brother — or, for returning characters, who to follow and what should happen"></textarea>
       </label>
       <p class="hint">Written at level ${cefr(state.settings.level)}, slightly above what you've shown you know.</p>
       <button class="btn primary wide" type="submit">Write chapter 1</button>
@@ -458,7 +477,9 @@ async function illustrate(series: Series, ch: Chapter): Promise<void> {
   refreshArt(ch);
   try {
     // Reference picture: the earliest other illustrated chapter of the series anchors the look.
-    const anchor = series.chapters.find((c) => c.id !== ch.id && c.hasImage);
+    // A story that reuses another series' characters borrows that series' pictures as its anchor.
+    const parent = state.series.find((x) => x.id === series.basedOn);
+    const anchor = series.chapters.find((c) => c.id !== ch.id && c.hasImage) ?? parent?.chapters.find((c) => c.hasImage);
     const reference = anchor ? (artCache.get(anchor.id) ?? (await getImage(anchor.id))) : undefined;
     const url = await compress(await generateIllustration(state, series, ch, reference));
     await putImage(ch.id, url);
@@ -678,6 +699,7 @@ async function writeChapter(series: Series | null, req: NewSeriesRequest | null)
         title: payload.series_title,
         premise: payload.series_premise,
         genre: req?.genre ?? "Story",
+        basedOn: req?.from?.id,
         storySoFar: payload.story_so_far,
         artBible: payload.art_bible || undefined,
         plan: payload.plan?.beats?.length ? { truth: payload.plan.truth, ending: payload.plan.ending, beats: payload.plan.beats, start: 0 } : undefined,
@@ -881,7 +903,7 @@ document.addEventListener("submit", (ev) => {
     persist();
     go({ name: "library" });
   } else if (form.dataset.form === "new") {
-    void writeChapter(null, { genre: text("genre"), idea: text("idea") });
+    void writeChapter(null, { genre: text("genre"), idea: text("idea"), from: state.series.find((x) => x.id === text("from")) });
   }
 });
 

@@ -27,6 +27,9 @@ progress are stored only in your browser; the key is sent only to the provider y
 
 ## How to use it
 
+- **New story or familiar faces:** when you already have a series, **＋ New series** asks who the
+  story is about — a completely new story (new cast, new setting, no reused names) or a new
+  adventure with the characters of an earlier series, kept consistent with what happened there.
 - **Start a series:** tap **＋ New series**, pick a genre, optionally describe your own idea, and tap
   **Write chapter 1**. Writing a chapter takes about a minute.
 - **Read:** try to understand from context first. Tap a word when you're stuck — you'll see its

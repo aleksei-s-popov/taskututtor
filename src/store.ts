@@ -60,6 +60,8 @@ export interface Series {
   genre: string;
   /** running summary used to keep continuity between chapters */
   storySoFar: string;
+  /** id of the series whose world and characters this one continues */
+  basedOn?: string;
   /** hidden plot plan for the current story arc — never shown to the reader (spoilers) */
   plan?: SeriesPlan;
   /** fixed art style + character looks, so every illustration of the series matches */
@@ -219,4 +221,12 @@ export function chapterLemmas(ch: Chapter): Map<string, string> {
         if (g && !g.name && !/^\d/.test(g.lemma)) lemmas.set(g.lemma.toLowerCase(), g.tr);
       }
   return lemmas;
+}
+
+/** Names of the people and places in a series (from its glossaries), most frequent first. */
+export function seriesNames(s: Series): string[] {
+  const count = new Map<string, number>();
+  for (const ch of s.chapters)
+    for (const g of Object.values(ch.glossary)) if (g.name) count.set(g.lemma, (count.get(g.lemma) ?? 0) + 1);
+  return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name);
 }
