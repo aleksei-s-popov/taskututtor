@@ -1,4 +1,7 @@
+import "@fontsource-variable/literata";
+import "@fontsource-variable/literata/wght-italic.css";
 import "./style.css";
+import { icon } from "./icons";
 import { cefr, finishChapter, ykiProgress, knownCount, learningWords, MAX_LEVEL, MIN_LEVEL, type ChapterResult } from "./adapt";
 import { aiDictionaryCard, friendlyError, generateChapter, generateIllustration, lookupWord, type NewSeriesRequest } from "./ai";
 import { cacheCard, cachedCard, wiktionaryCard, type DictCard } from "./dict";
@@ -217,7 +220,7 @@ function libraryView(): string {
       <article class="card">
         <div class="card-top">
           <span class="tag">${s.sample ? "Sample · " : ""}${esc(s.genre)}</span>
-          <button class="icon" data-act="delete-series" data-id="${s.id}" aria-label="Delete series">✕</button>
+          <button class="icon" data-act="delete-series" data-id="${s.id}" aria-label="Delete series">${icon("trash", 18)}</button>
         </div>
         <h3>${esc(s.title)}</h3>
         <p>${esc(s.premise)}</p>
@@ -234,13 +237,13 @@ function libraryView(): string {
   return `
   <header class="top">
     <h1 class="brand small">Taskututtor</h1>
-    <button class="icon" data-act="nav" data-to="settings" aria-label="Settings">⚙</button>
+    <button class="icon" data-act="nav" data-to="settings" aria-label="Settings">${icon("settings", 22)}</button>
   </header>
   <main class="page">
     <section class="stats">
       <div><b>${cefr(state.settings.level)}</b><small>your level · ${state.settings.level.toFixed(2)}</small></div>
       <div><b>${knownCount(state)}</b><small>words known</small></div>
-      <button data-act="nav" data-to="words"><b>${learning}</b><small>learning ›</small></button>
+      <button data-act="nav" data-to="words"><b>${learning}</b><small>learning ${icon("forward", 12)}</small></button>
     </section>
     ${
       state.settings.yki
@@ -253,14 +256,14 @@ function libraryView(): string {
     ${activeKey(state.settings) ? "" : `<p class="notice">Add your API key in <a href="#" data-act="nav" data-to="settings">Settings</a> to generate new stories. The sample below works without it.</p>`}
     <h2>Your series</h2>
     ${cards || `<p class="hint">Nothing here yet — start your first series.</p>`}
-    <button class="btn primary wide" data-act="nav" data-to="new">＋ New series</button>
+    <button class="btn primary wide" data-act="nav" data-to="new">${icon("plus")} New series</button>
   </main>`;
 }
 
 function newSeriesView(): string {
   return `
   <header class="top">
-    <button class="icon" data-act="nav" data-to="library" aria-label="Back">‹</button>
+    <button class="icon" data-act="nav" data-to="library" aria-label="Back">${icon("back", 22)}</button>
     <h1>New series</h1><span></span>
   </header>
   <main class="page">
@@ -301,7 +304,7 @@ function wordsView(): string {
   const learning = learningWords(state);
   return `
   <header class="top">
-    <button class="icon" data-act="nav" data-to="library" aria-label="Back">‹</button>
+    <button class="icon" data-act="nav" data-to="library" aria-label="Back">${icon("back", 22)}</button>
     <h1>Words</h1><span></span>
   </header>
   <main class="page">
@@ -312,7 +315,7 @@ function wordsView(): string {
             .map(
               ([lemma, w]) => `
           <li>
-            <button class="icon" data-act="speak" data-text="${esc(lemma)}" aria-label="Listen">🔊</button>
+            <button class="icon" data-act="speak" data-text="${esc(lemma)}" aria-label="Listen">${icon("volume")}</button>
             <span><b>${esc(lemma)}</b><small>${esc(w.tr)}</small></span>
             <button class="btn small" data-act="mark-known" data-lemma="${esc(lemma)}">I know it</button>
           </li>`,
@@ -327,7 +330,7 @@ function settingsView(): string {
   const s = state.settings;
   return `
   <header class="top">
-    <button class="icon" data-act="nav" data-to="library" aria-label="Back">‹</button>
+    <button class="icon" data-act="nav" data-to="library" aria-label="Back">${icon("back", 22)}</button>
     <h1>Settings</h1><span></span>
   </header>
   <main class="page">
@@ -421,9 +424,9 @@ function endHtml(series: Series, ch: Chapter, idx: number): string {
       <h3>How was this chapter?</h3>
       <p class="hint">Your answer and the words you looked up shape the next one.</p>
       <div class="feedback">
-        <button class="btn" data-act="feedback" data-fb="easy">😌<br>Too easy</button>
-        <button class="btn" data-act="feedback" data-fb="right">🙂<br>Just right</button>
-        <button class="btn" data-act="feedback" data-fb="hard">😵<br>Too hard</button>
+        <button class="btn" data-act="feedback" data-fb="easy">Too easy</button>
+        <button class="btn" data-act="feedback" data-fb="right">Just right</button>
+        <button class="btn" data-act="feedback" data-fb="hard">Too hard</button>
       </div>`;
   }
   const r = lastResult?.chapterId === ch.id ? lastResult.result : null;
@@ -437,15 +440,15 @@ function endHtml(series: Series, ch: Chapter, idx: number): string {
            ${r.quiz.total ? `Questions: <b>${r.quiz.right}/${r.quiz.total}</b> right.` : ""}
            ${r.newlyKnown ? `<b>${r.newlyKnown}</b> more word${r.newlyKnown === 1 ? "" : "s"} now count as known.` : ""}
            Level: <b>${cefr(state.settings.level)} · ${state.settings.level.toFixed(2)}</b>${d ? ` (${d > 0 ? "+" : ""}${d.toFixed(2)})` : ""}. ${move}</p>`
-        : `<p class="hint">Chapter finished ✓</p>`
+        : `<p class="hint done">${icon("check", 16)} Chapter finished</p>`
     }
     ${
       !hasNext && series.plan && series.chapters.length >= arcLength(series)
-        ? `<h3>The end 🎉</h3>
+        ? `<h3>The end</h3>
            <p class="hint">This story has reached its ending. Start something new, or follow the same characters into a new adventure.</p>
-           <button class="btn primary wide" data-act="nav" data-to="new">＋ New series</button>
-           <button class="btn wide" data-act="next">Write a sequel ›</button>`
-        : `<button class="btn primary wide" data-act="next">${hasNext ? "Next chapter ›" : "Write the next chapter ›"}</button>`
+           <button class="btn primary wide" data-act="nav" data-to="new">${icon("plus")} New series</button>
+           <button class="btn wide" data-act="next">Write a sequel ${icon("forward", 18)}</button>`
+        : `<button class="btn primary wide" data-act="next">${hasNext ? "Next chapter" : "Write the next chapter"} ${icon("forward", 18)}</button>`
     }`;
 }
 
@@ -456,20 +459,22 @@ function readerView(): string {
   const idx = view.idx;
   return `
   <header class="top">
-    <button class="icon" data-act="nav" data-to="library" aria-label="Back">‹</button>
+    <button class="icon" data-act="nav" data-to="library" aria-label="Back">${icon("back", 22)}</button>
     <h1>${esc(series.title)}</h1>
     <span class="chapnav">
-      <button class="icon" data-act="open" data-id="${series.id}" data-idx="${idx - 1}" ${idx === 0 ? "disabled" : ""} aria-label="Previous chapter">‹</button>
+      <button class="icon" data-act="open" data-id="${series.id}" data-idx="${idx - 1}" ${idx === 0 ? "disabled" : ""} aria-label="Previous chapter">${icon("back", 18)}</button>
       <small>${idx + 1}/${series.chapters.length}</small>
-      <button class="icon" data-act="open" data-id="${series.id}" data-idx="${idx + 1}" ${idx + 1 >= series.chapters.length ? "disabled" : ""} aria-label="Next chapter">›</button>
+      <button class="icon" data-act="open" data-id="${series.id}" data-idx="${idx + 1}" ${idx + 1 >= series.chapters.length ? "disabled" : ""} aria-label="Next chapter">${icon("forward", 18)}</button>
     </span>
   </header>
   <main class="page reader">
     <p class="kicker">Chapter ${idx + 1}${series.plan && idx >= series.plan.start && idx < arcLength(series) ? ` of ${arcLength(series)}` : ""} · ${cefr(ch.level)}</p>
     <h2 class="chapter-title">${esc(ch.title)}</h2>
     <figure class="art" id="art">${artHtml(ch)}</figure>
-    <p class="hint">Tap a word for its meaning. Try to guess first.
-      <button class="link" data-act="player-open">🔊 Listen sentence by sentence</button></p>
+    <div class="reader-tools">
+      <button class="btn small" data-act="player-open">${icon("volume", 18)} Listen sentence by sentence</button>
+    </div>
+    <p class="hint">Tap a word for its meaning. Try to guess first.</p>
     <article class="text">
       ${ch.paragraphs.map((p, pi) => `<p>${p.map((_, si) => sentenceHtml(ch, pi, si)).join("")}</p>`).join("")}
     </article>
@@ -510,16 +515,16 @@ function renderPlayer(): void {
   const gap = state.settings.listenGap;
   player.innerHTML = `
     <div class="player-main">
-      <button class="icon" data-act="player-prev" aria-label="Previous sentence" ${player.idx === 0 ? "disabled" : ""}>⏮</button>
-      <button class="icon" data-act="player-repeat" aria-label="Repeat sentence">🔁</button>
-      <button class="icon play" data-act="player-toggle" aria-label="${player.playing ? "Pause" : "Play"}">${player.playing ? "⏸" : "▶"}</button>
-      <button class="icon" data-act="player-next" aria-label="Next sentence" ${player.idx >= total - 1 ? "disabled" : ""}>⏭</button>
-      <button class="icon" data-act="player-close" aria-label="Close player">✕</button>
+      <button class="icon" data-act="player-prev" aria-label="Previous sentence" ${player.idx === 0 ? "disabled" : ""}>${icon("prev", 24)}</button>
+      <button class="icon" data-act="player-repeat" aria-label="Repeat sentence">${icon("repeat", 22)}</button>
+      <button class="icon play" data-act="player-toggle" aria-label="${player.playing ? "Pause" : "Play"}">${icon(player.playing ? "pause" : "play", 26)}</button>
+      <button class="icon" data-act="player-next" aria-label="Next sentence" ${player.idx >= total - 1 ? "disabled" : ""}>${icon("next", 24)}</button>
+      <button class="icon" data-act="player-close" aria-label="Close player">${icon("close", 22)}</button>
     </div>
     <div class="player-opts">
       <small>${player.idx + 1} / ${total}</small>
-      <button class="link" data-act="player-gap">After each sentence: ${gap ? `wait ${gap} s` : "wait for me"}</button>
-      <button class="link" data-act="player-rate">Speed ${state.settings.listenRate}×</button>
+      <button class="btn small" data-act="player-gap">${gap ? `Pause ${gap} s` : "Wait for me"}</button>
+      <button class="btn small" data-act="player-rate">Speed ${state.settings.listenRate}×</button>
     </div>`;
   player.classList.add("open");
 }
@@ -608,11 +613,11 @@ function artHtml(ch: Chapter): string {
   }
   if (url) {
     return `<img src="${url}" alt="Illustration for this chapter">
-      <button class="btn small ghost" data-act="illustrate">↻ Regenerate illustration</button>`;
+      <button class="btn small ghost" data-act="illustrate">${icon("repeat", 16)} Regenerate illustration</button>`;
   }
   if (ch.hasImage) return `<div class="art-wait"></div>`; // still loading from storage
   if (!state.settings.illustrations) return "";
-  return `<button class="btn small" data-act="illustrate">🎨 Illustrate this chapter</button>`;
+  return `<button class="btn small" data-act="illustrate">${icon("image", 18)} Illustrate this chapter</button>`;
 }
 
 function refreshArt(ch: Chapter): void {
@@ -702,7 +707,7 @@ function dictHtml(): string {
   return `
     <section class="dict">
       <p class="dict-head"><b lang="fi">${esc(card.lemma)}</b>
-        <button class="icon" data-act="speak" data-text="${esc(card.lemma)}" aria-label="Listen to the word">🔊</button></p>
+        <button class="icon" data-act="speak" data-text="${esc(card.lemma)}" aria-label="Listen to the word">${icon("volume", 18)}</button></p>
       ${body}
       <p class="dict-foot">
         ${more ? `<button class="link" data-act="dict-all">${d.all ? "Show less" : total > 3 ? `Show all ${total} meanings and examples` : "Show all examples"}</button>` : ""}
@@ -759,14 +764,14 @@ function sheetHtml(word: string, g: GlossEntry | null, status: string, showSente
         <b class="form">${esc(word)}</b>
         ${g && g.lemma.toLowerCase() !== word.toLowerCase() ? `<span class="lemma">← ${esc(g.lemma)}</span>` : ""}
       </div>
-      <button class="icon" data-act="close-sheet" aria-label="Close">✕</button>
+      <button class="icon" data-act="close-sheet" aria-label="Close">${icon("close")}</button>
     </div>
     ${g ? `<p class="tr">${esc(g.tr)}</p>${g.note ? `<p class="note">${esc(g.note)}</p>` : ""}` : `<p class="note">${esc(status)}</p>`}
     ${showSentence ? `<p class="sent-tr">${esc(ctx.sentence.tr)}</p>` : ""}
     <div id="dict">${dictHtml()}</div>
     <div class="sheet-actions">
-      <button class="btn small" data-act="speak" data-text="${esc(ctx.sentence.fi)}">🔊 Listen</button>
-      <button class="btn small" data-act="player-open">▶ Play from here</button>
+      <button class="btn small" data-act="speak" data-text="${esc(ctx.sentence.fi)}">${icon("volume", 18)} Listen</button>
+      <button class="btn small" data-act="player-open">${icon("play", 16)} Play from here</button>
       ${showSentence ? "" : `<button class="btn small" data-act="peek">Translate sentence</button>`}
       ${g && !g.name ? `<button class="btn small" data-act="know">I know this word</button>` : ""}
     </div>`;
