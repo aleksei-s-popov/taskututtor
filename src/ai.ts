@@ -273,6 +273,11 @@ function buildPrompt(state: State, series: Series | null, req: NewSeriesRequest 
         `The previous story arc has ended (truth: ${plan.truth} Ending: ${plan.ending}).`,
         "Create a NEW plan for a sequel arc of 8–12 chapters with the same main characters but a fresh central conflict, new places and new stakes. Its first beat is the chapter you write now.",
       );
+    } else if (n < 4) {
+      lines.push(
+        "",
+        "This series has no secret plan yet. Create one now for a complete story that ends in 8–11 more chapters: the truth behind what has happened so far, the ending, and one beat per chapter. The first beat is the chapter you write now. Vary locations and kinds of events; put a major reveal or reversal around the middle.",
+      );
     } else {
       lines.push(
         "",
