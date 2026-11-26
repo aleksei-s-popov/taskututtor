@@ -12,6 +12,7 @@ import { applyChapter } from "./story";
 import { activeKey, arcLength, formKey, seriesNames, GLOSSARY_MODEL, IMAGE_MODELS, LOCAL_KEY, useStorage, load, MODELS, OR_MODELS, save, tokenize, type Chapter, type Feedback, type GlossEntry, type Series } from "./store";
 
 type View =
+  | { name: "gate" }
   | { name: "onboard" }
   | { name: "library" }
   | { name: "new" }
@@ -21,15 +22,24 @@ type View =
 
 // Account mode: signed-in readers get their library from the server (cached on the device so it
 // also opens offline). Everyone else uses the device-only library with their own API key.
+//
+// The two never mix. A build with a server configured is the subscription product: it has no
+// personal-key mode at all, and signed-out visitors only see the sign-in screen. A build without
+// one (the open-source build, also used as staging) has no accounts.
+const accountOnly = cloud.cloudAvailable;
 const cloudKey = (uid: string) => `taskututtor.cloud.${uid}`;
-let account: string | null = cloud.cloudAvailable ? localStorage.getItem("taskututtor.last-user") : null;
+/** Signed-out visitors of the subscription build get an empty, never-used library. */
+const SIGNED_OUT_KEY = "taskututtor.signed-out";
+let account: string | null = accountOnly ? localStorage.getItem("taskututtor.last-user") : null;
 if (account) useStorage(cloudKey(account));
+else if (accountOnly) useStorage(SIGNED_OUT_KEY);
 const inCloud = () => account !== null;
 
 const state = load();
 /** Whether new chapters and AI lookups are possible right now. */
 const canGenerate = () => inCloud() || !!activeKey(state.settings);
-let view: View = state.settings.onboarded ? { name: "library" } : { name: "onboard" };
+const homeView = (): View => (accountOnly && !account ? { name: "gate" } : state.settings.onboarded ? { name: "library" } : { name: "onboard" });
+let view: View = homeView();
 let lastResult: { chapterId: string; result: ChapterResult } | null = null;
 
 const app = document.getElementById("app")!;
@@ -105,10 +115,10 @@ function applyAccount(): void {
   const uid = cloud.userId();
   if (uid === account) return;
   clearTimeout(pushTimer);
-  const firstTime = !!uid && !localStorage.getItem(cloudKey(uid));
+  const firstTime = !accountOnly && !!uid && !localStorage.getItem(cloudKey(uid));
   const device = { settings: state.settings, words: state.words };
   account = uid;
-  useStorage(uid ? cloudKey(uid) : LOCAL_KEY);
+  useStorage(uid ? cloudKey(uid) : accountOnly ? SIGNED_OUT_KEY : LOCAL_KEY);
   if (uid) localStorage.setItem("taskututtor.last-user", uid);
   else localStorage.removeItem("taskututtor.last-user");
   const next = load();
@@ -122,7 +132,7 @@ function applyAccount(): void {
   Object.assign(state, { settings: next.settings, series: next.series, words: next.words, sync: next.sync });
   save(state);
   artCache.clear();
-  view = state.settings.onboarded ? { name: "library" } : { name: "onboard" };
+  view = homeView();
   closeSheet();
   render();
   if (uid) void syncNow(true).then(() => (view.name === "onboard" && state.settings.onboarded ? go({ name: "library" }) : undefined));
@@ -137,6 +147,7 @@ function toast(msg: string): void {
 }
 
 function go(v: View): void {
+  if (accountOnly && !account) v = { name: "gate" };
   closeSheet();
   playerClose();
   view = v;
@@ -166,6 +177,9 @@ function speak(text: string): void {
 function render(): void {
   document.documentElement.style.setProperty("--read-size", state.settings.fontSize + "px");
   switch (view.name) {
+    case "gate":
+      app.innerHTML = gateView();
+      break;
     case "onboard":
       app.innerHTML = onboardView();
       break;
@@ -260,6 +274,19 @@ function keyField(full: boolean): string {
       <select name="model">${MODELS.map((m) => `<option value="${m.id}" ${m.id === s.model ? "selected" : ""}>${m.label}</option>`).join("")}</select>
     </label>`
     }`;
+}
+
+/** The subscription build's front door: nothing works without an account. */
+function gateView(): string {
+  return `
+  <main class="page gate">
+    <img src="./mark.svg" alt="" width="84" height="84">
+    <h1 class="brand">Taskututtor</h1>
+    <p class="lead">Learn Finnish by reading stories written for exactly your level.</p>
+    <button class="btn primary wide" data-act="sign-in">Sign in</button>
+    <button class="btn wide" data-act="join">Join the waitlist</button>
+    <p class="hint">Taskututtor is opening to readers a few at a time. Join the waitlist and you will get an email when your place is ready.</p>
+  </main>`;
 }
 
 function onboardView(): string {
@@ -424,6 +451,7 @@ function settingsView(): string {
           ? `<p class="notice"><button class="link" data-act="sign-in">Sign in</button> to sync your library between devices and have chapters written in the background — no API key needed.</p>`
           : ""
     }
+    ${accountOnly ? "" : `<p class="hint">Open-source build: stories are written with your own API key, and everything is stored in this browser only.</p>`}
     <form data-form="settings">
       ${inCloud() ? "" : keyField(true)}
       ${langField()}
@@ -1159,7 +1187,10 @@ document.addEventListener("click", (ev) => {
     }
     case "sign-in":
       ev.preventDefault();
-      cloud.signIn();
+      cloud.signIn().catch((e) => toast(friendlyError(e)));
+      break;
+    case "join":
+      cloud.joinWaitlist().catch((e) => toast(friendlyError(e)));
       break;
     case "sign-out":
       // Send what is unsent before leaving the account.
@@ -1421,6 +1452,8 @@ if (cloud.cloudAvailable) {
     .then(() => {
       applyAccount();
       void syncNow(true);
+      // Arriving from the landing page's "Join the waitlist" button.
+      if (!account && location.hash === "#join") void cloud.joinWaitlist().catch(() => undefined);
     })
     .catch(() => undefined); // offline: keep working from the cache
   document.addEventListener("visibilitychange", () => {

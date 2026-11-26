@@ -1,23 +1,21 @@
 <!doctype html>
 <!--
-  Taskututtor landing page: one static file, no build step.
-  The two addresses to change when things move:
-    - the app:     https://aleksei-s-popov.github.io/taskututtor/
-    - the source:  https://github.com/aleksei-s-popov/taskututtor
+  Taskututtor landing page: static files, no build step.
+  It is published together with the subscription app (see server/README.md): this page at /,
+  the app at /app/. Every button here leads to /app/, never anywhere else.
 -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Taskututtor — learn Finnish by reading stories written for your level</title>
-    <meta name="description" content="Taskututtor writes serialized Finnish stories at exactly your level, and a little above it. Tap any word, listen sentence by sentence, prepare for the YKI test." />
-    <meta property="og:title" content="Taskututtor — learn Finnish by reading" />
-    <meta property="og:description" content="Stories you can't put down, written for exactly your level. Tap any word. Listen sentence by sentence. Built for the YKI test." />
+    <title>Taskututtor — Finnish, learned by reading</title>
+    <meta name="description" content="Taskututtor writes serialized Finnish stories for exactly your level. Tap any word, listen sentence by sentence, prepare for the YKI test. Join the waitlist." />
+    <meta property="og:title" content="Taskututtor — Finnish, learned by reading" />
+    <meta property="og:description" content="Stories written for exactly your level, one chapter at a time. Join the waitlist." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="img/og.png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="theme-color" content="#f7f4ee" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#14171d" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#0c111d" />
     <link rel="icon" href="mark.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon-192.png" />
     <link rel="preload" href="fonts/literata-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
@@ -26,60 +24,70 @@
   <body>
     <header class="nav">
       <a class="brand" href="#top" aria-label="Taskututtor">
-        <img src="mark.svg" alt="" width="36" height="36" />
+        <img src="mark.svg" alt="" width="38" height="38" />
         <span>Taskututtor</span>
       </a>
       <nav>
-        <a href="#how">How it works</a>
+        <a href="#method">The method</a>
         <a href="#yki">YKI</a>
-        <a href="#pricing">Pricing</a>
-        <a class="btn small" href="https://aleksei-s-popov.github.io/taskututtor/">Open the app</a>
+        <a href="#membership">Membership</a>
+        <a href="/app/">Sign in</a>
+        <a class="btn small" href="/app/#join">Join the waitlist</a>
       </nav>
     </header>
 
     <main id="top">
       <section class="hero">
         <div class="hero-text">
-          <p class="eyebrow">Finnish, one chapter at a time</p>
-          <h1>Learn Finnish by reading stories you can’t put down.</h1>
+          <p class="eyebrow">Finnish, learned by reading</p>
+          <h1>A story written for you. <em>In Finnish you can read.</em></h1>
           <p class="lead">
-            Taskututtor writes a serialized story at exactly your level, and a little above it. Tap any word you don’t know. The next chapter adapts to how this one went.
+            Taskututtor writes a serialized novel at exactly your level, and a little above it. One chapter at a time, each shaped by how you read the last.
           </p>
           <div class="cta">
-            <a class="btn primary" href="https://aleksei-s-popov.github.io/taskututtor/">Start reading</a>
-            <a class="btn" href="#how">See how it works</a>
+            <a class="btn primary" href="/app/#join">Join the waitlist</a>
+            <a class="btn ghost" href="#method">How it works</a>
           </div>
-          <p class="fine">Free and open source with your own AI key. Works in the browser and installs on your phone’s home screen.</p>
         </div>
         <div class="hero-art">
+          <div class="glow" aria-hidden="true"></div>
           <div class="phone"><img src="img/reader.jpg" alt="A chapter of a Finnish story in the app, with an illustration and large, readable text" width="412" height="839" /></div>
-          <div class="phone back" aria-hidden="true"><img src="img/word.jpg" alt="" width="412" height="839" loading="lazy" /></div>
         </div>
       </section>
 
-      <section class="strip" aria-label="What makes it different">
-        <p><b>Your level, not a textbook’s.</b> From your first 200 words to reading novels.</p>
-        <p><b>A plot with an ending.</b> Every series is planned, chapter by chapter.</p>
-        <p><b>Real Finnish.</b> Natural sentences, simple by word choice, never broken grammar.</p>
+      <section class="claims" aria-label="What makes it different">
+        <div>
+          <h2>Your level</h2>
+          <p>From your first two hundred words to full novels. Measured after every chapter, never guessed.</p>
+        </div>
+        <div>
+          <h2>A real plot</h2>
+          <p>Every series is planned from its first page to its ending. Questions are answered. Characters stay themselves.</p>
+        </div>
+        <div>
+          <h2>Real Finnish</h2>
+          <p>Natural sentences, made simple by word choice and repetition. Never by broken grammar.</p>
+        </div>
       </section>
 
-      <section id="how" class="section">
-        <h2>How it works</h2>
+      <section id="method" class="section">
+        <p class="eyebrow">The method</p>
+        <h2 class="display">Read. Tap. <em>Keep reading.</em></h2>
         <ol class="steps">
           <li>
-            <span class="num">1</span>
-            <h3>Pick a story</h3>
-            <p>Choose a genre, or describe your own idea: a mystery in Turku, a horror story on a night train, a comedy about a sauna. A new series is planned for you, with its own characters and ending.</p>
+            <span class="num">I</span>
+            <h3>Choose your story</h3>
+            <p>A mystery in Turku, a night train that never arrives, a comedy set in a sauna. Pick a genre or describe your own idea, and a series is planned for you alone.</p>
           </li>
           <li>
-            <span class="num">2</span>
+            <span class="num">II</span>
             <h3>Read, and tap what you don’t know</h3>
-            <p>Try to understand from context first. One tap shows a word’s meaning, its dictionary form and a grammar hint. Another shows the whole sentence in your language.</p>
+            <p>One tap shows a word’s meaning, its dictionary form and what its ending is doing. Another shows the whole sentence in your language.</p>
           </li>
           <li>
-            <span class="num">3</span>
-            <h3>Say how it went</h3>
-            <p>Too easy, just right or too hard. Together with the words you looked up, your answer sets the level of the next chapter. Words you needed help with come back until they stick.</p>
+            <span class="num">III</span>
+            <h3>The next chapter adapts</h3>
+            <p>What you looked up and how the chapter felt set the level of the next one. Words you needed help with return until they stay.</p>
           </li>
         </ol>
       </section>
@@ -87,12 +95,12 @@
       <section class="section feature">
         <div class="feature-text">
           <p class="eyebrow">Words</p>
-          <h2>Every word is one tap away</h2>
-          <p>Finnish hides its words inside endings. Tap <i lang="fi">kellossa</i> and you see <i lang="fi">kello</i>, “clock”, and that the ending means “in”. Below that, a dictionary card from Wiktionary lists the word’s other meanings with examples.</p>
+          <h2>Every word, one tap away.</h2>
+          <p>Finnish hides its words inside endings. Tap <i lang="fi">kellossa</i> and you see <i lang="fi">kello</i>, “clock”, and that the ending means “in”. Beneath it, a dictionary entry with the word’s other meanings and examples.</p>
           <ul class="ticks">
-            <li>Meaning, base form and grammar hint for every word in every chapter</li>
-            <li>Whole-sentence translation when one word isn’t enough</li>
-            <li>Words you read three chapters running without help count as known</li>
+            <li>Meaning, base form and grammar for every word of every chapter</li>
+            <li>Whole-sentence translation when one word is not enough</li>
+            <li>The app remembers what you know, and what you are still learning</li>
           </ul>
         </div>
         <div class="phone"><img src="img/word.jpg" alt="The word panel: the Finnish word kello with its meaning and a dictionary entry" width="412" height="839" loading="lazy" /></div>
@@ -101,10 +109,10 @@
       <section class="section feature flip">
         <div class="feature-text">
           <p class="eyebrow">Listening</p>
-          <h2>Listen at your own pace</h2>
-          <p>Hear the story sentence by sentence while you read along. The player waits after each sentence until you are ready, so you have time to read it again and recall every word.</p>
+          <h2>Hear it at your own pace.</h2>
+          <p>Listen sentence by sentence while you read along. The player waits after each one until you are ready, so there is time to read it again and recall every word.</p>
           <ul class="ticks">
-            <li>Repeat a sentence, step back, or let it run with pauses</li>
+            <li>Repeat, step back, or let it run with pauses</li>
             <li>Three speeds, with the current sentence highlighted</li>
             <li>Tap a word mid-sentence and playback pauses for you</li>
           </ul>
@@ -114,16 +122,16 @@
 
       <section id="yki" class="section feature">
         <div class="feature-text">
-          <p class="eyebrow">YKI test</p>
-          <h2>Reading that prepares you for YKI</h2>
-          <p>If your goal is the Finnish YKI intermediate test, the stories work for it. Their plots run through the situations the test is built on, and each chapter ends with questions in the test’s style.</p>
+          <p class="eyebrow">YKI</p>
+          <h2>Reading that prepares you for the test.</h2>
+          <p>If your goal is the Finnish YKI intermediate test, the stories work toward it. Their plots run through the situations the test is built on, and every chapter ends with questions in its style.</p>
           <ul class="ticks">
-            <li>Housing, health, work, authorities, travel and more, woven into the plot</li>
+            <li>Housing, health, work, authorities and travel, woven into the plot</li>
             <li>Everyday texts inside the story: messages, notices, official letters</li>
-            <li>Three comprehension questions after every chapter</li>
-            <li>A progress bar from your first words to level B1</li>
+            <li>Three comprehension questions after each chapter</li>
+            <li>Your progress, from first words to level B1</li>
           </ul>
-          <p class="fine">Taskututtor trains reading, vocabulary and listening. YKI also tests writing and speaking, which you will need to practise elsewhere.</p>
+          <p class="fine">Taskututtor trains reading, vocabulary and listening. YKI also tests writing and speaking, which need practice elsewhere.</p>
         </div>
         <div class="phone"><img src="img/questions.jpg" alt="Multiple-choice comprehension questions in Finnish at the end of a chapter" width="412" height="839" loading="lazy" /></div>
       </section>
@@ -131,95 +139,82 @@
       <section class="section feature flip">
         <div class="feature-text">
           <p class="eyebrow">Stories</p>
-          <h2>Stories that go somewhere</h2>
-          <p>Each series follows a hidden plan: what is really going on, how it ends, and what happens in every chapter. Questions get answered. Characters stay who they are. When a story ends, start a new one or follow the same characters into a sequel.</p>
+          <h2>Illustrated, and yours alone.</h2>
+          <p>Each chapter can carry an illustration, painted in one consistent style with the same faces from first page to last. Your library follows you between phone and computer, and the next chapter is written while you are away.</p>
           <ul class="ticks">
             <li>Nine to twelve chapters, each ending on a hook</li>
-            <li>Optional illustrations that keep the same faces and style</li>
-            <li>Your interests shape the tone, from dry irony to quiet horror</li>
+            <li>Sequels with the characters you already know</li>
+            <li>Your interests set the tone, from dry irony to quiet horror</li>
           </ul>
         </div>
         <div class="phone"><img src="img/home.jpg" alt="The home screen with your level, known words, YKI progress and a series with its cover picture" width="412" height="839" loading="lazy" /></div>
       </section>
 
-      <section class="section why">
-        <h2>Why reading works</h2>
-        <div class="cols">
-          <p>You pick up a language fastest from text you almost understand: when about 95 to 98 words in a hundred are familiar, the rest can be guessed from the story around them. Too easy and nothing is new. Too hard and you stop.</p>
-          <p>Books for learners rarely sit at that point for long, because you keep improving. Taskututtor measures where you are after every chapter and writes the next one to match, in a story you want to finish anyway.</p>
-        </div>
+      <section class="quote">
+        <p class="eyebrow">Why it works</p>
+        <blockquote>
+          You learn a language fastest from text you <em>almost</em> understand. Ninety-five words in a hundred familiar; the rest guessed from a story you want to finish.
+        </blockquote>
+        <p>Books for learners rarely stay at that point, because you keep improving. Taskututtor finds it again after every chapter.</p>
       </section>
 
-      <section id="pricing" class="section">
-        <h2>Two ways to use it</h2>
-        <div class="plans">
-          <article class="plan">
-            <p class="tag">Available now</p>
-            <h3>Free, with your own key</h3>
-            <p>The whole app, open source. You connect your own AI key from OpenRouter and pay the AI provider directly for what you read: with the default models, roughly two to three cents a chapter, and about a cent more with an illustration.</p>
-            <ul class="ticks">
-              <li>Everything on this page</li>
-              <li>Your stories and progress stay on your device</li>
-              <li>No account, no subscription</li>
-            </ul>
-            <a class="btn primary" href="https://aleksei-s-popov.github.io/taskututtor/">Open the app</a>
-          </article>
-          <article class="plan soon">
-            <p class="tag">Coming</p>
-            <h3>Account</h3>
-            <p>Sign in and skip the key. Your library and progress follow you between phone and computer, and new chapters are written in the background while you do something else.</p>
-            <ul class="ticks">
-              <li>Sync between devices</li>
-              <li>Chapters ready when you open the app</li>
-              <li>Apps for Android and iPhone</li>
-            </ul>
-            <p class="fine">Pricing will be announced when it opens.</p>
-          </article>
+      <section id="membership" class="section membership">
+        <div class="card">
+          <p class="eyebrow">Membership</p>
+          <h2>Opening a few readers at a time.</h2>
+          <p class="lead">Every story is written for one reader. To keep that quality, we are letting people in gradually. Leave your email and we will write when your place is ready.</p>
+          <ul class="ticks two">
+            <li>A new series whenever you want one</li>
+            <li>Every word explained, every sentence translated</li>
+            <li>Sentence-by-sentence listening</li>
+            <li>Illustrated chapters</li>
+            <li>YKI questions and progress</li>
+            <li>Your library on every device</li>
+          </ul>
+          <a class="btn primary" href="/app/#join">Join the waitlist</a>
+          <p class="fine">Already a member? <a href="/app/">Sign in</a>.</p>
         </div>
       </section>
 
       <section class="section faq">
-        <h2>Questions</h2>
+        <p class="eyebrow">Questions</p>
+        <h2 class="display">Before you join.</h2>
         <details>
           <summary>Do I need to know any Finnish to start?</summary>
-          <p>No. At the lowest level, chapters use about 200 of the most common words in very short sentences, and every word can be tapped. A built-in sample chapter lets you try it before connecting a key.</p>
-        </details>
-        <details>
-          <summary>What is an AI key, and what does it cost?</summary>
-          <p>The stories are written by an AI model. In the free version you create a key at openrouter.ai, add a few dollars of credit, and paste the key into the app. A chapter costs a few cents. The key is stored only on your device.</p>
+          <p>No. At the lowest level, chapters use about two hundred of the most common words in very short sentences, and every word can be tapped.</p>
         </details>
         <details>
           <summary>Does it work on my phone?</summary>
-          <p>Yes. Open the app in your phone’s browser and choose “Add to Home screen”; it then opens like any other app, and chapters you already have can be read offline. Store apps for Android and iPhone are planned.</p>
+          <p>Yes. It runs in your phone’s browser and can be added to the home screen, where it opens like any other app. Chapters you already have can be read offline. Apps for Android and iPhone are planned.</p>
         </details>
         <details>
           <summary>Which languages are the translations in?</summary>
-          <p>Word meanings and sentence translations can be in any language you choose. The extra dictionary cards come from the English Wiktionary and are in English.</p>
+          <p>Word meanings and sentence translations can be in the language you choose. The additional dictionary entries come from the English Wiktionary and are in English.</p>
         </details>
         <details>
-          <summary>Is the Finnish correct?</summary>
-          <p>The default models were chosen by testing many of them on Finnish and having the results checked for errors; the best scored well but none was perfect. Expect natural, mostly clean Finnish with an occasional slip. The test results are published with the source code.</p>
+          <summary>How good is the Finnish?</summary>
+          <p>The models that write the stories were chosen by testing many of them on Finnish and checking the results for errors. Expect natural, mostly clean Finnish with an occasional slip, at a level a learner can read.</p>
         </details>
         <details>
-          <summary>Who is behind it?</summary>
-          <p>Taskututtor is an open-source project under the Apache 2.0 licence. You can read the code, run it yourself, or suggest improvements on GitHub.</p>
+          <summary>How long does a chapter take to arrive?</summary>
+          <p>About a minute. It is written while you do something else, and it is waiting in your library when you come back.</p>
+        </details>
+        <details>
+          <summary>What happens after I join the waitlist?</summary>
+          <p>You receive an email when your place opens. From then on you sign in with your email address; there is no password to remember.</p>
         </details>
       </section>
 
       <section class="closing">
-        <img src="mark.svg" alt="" width="72" height="72" />
-        <h2>Your first chapter is a minute away.</h2>
-        <a class="btn primary" href="https://aleksei-s-popov.github.io/taskututtor/">Start reading</a>
+        <img src="mark.svg" alt="" width="76" height="76" />
+        <h2 class="display">Your first chapter is <em>waiting to be written.</em></h2>
+        <a class="btn primary" href="/app/#join">Join the waitlist</a>
       </section>
     </main>
 
     <footer class="foot">
-      <p><b>Taskututtor</b> · <span lang="fi">tasku</span> means pocket. A Finnish tutor for yours.</p>
-      <p>
-        <a href="https://github.com/aleksei-s-popov/taskututtor">Source code on GitHub</a> ·
-        <a href="https://github.com/aleksei-s-popov/taskututtor/blob/HEAD/LICENSE">Apache 2.0 licence</a> ·
-        Dictionary entries from <a href="https://en.wiktionary.org">Wiktionary</a> (CC BY-SA)
-      </p>
+      <p><b>Taskututtor</b> · <span lang="fi">tasku</span> is Finnish for pocket.</p>
+      <p>Dictionary entries from <a href="https://en.wiktionary.org">Wiktionary</a>, CC BY-SA.</p>
     </footer>
   </body>
 </html>

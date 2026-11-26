@@ -243,7 +243,8 @@ describe("account API", () => {
   });
 
   it("runs the scheduled database export", async () => {
-    const res = await fetch(`http://127.0.0.1:${PORT}/__scheduled?cron=17+3+*+*+1`);
+    // wrangler's test hook for cron triggers (the real trigger is not an HTTP request)
+    const res = await fetch(`http://127.0.0.1:${PORT}/cdn-cgi/handler/scheduled?cron=17+3+*+*+1`);
     expect(res.status).toBe(200);
   });
 });

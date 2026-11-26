@@ -68,15 +68,22 @@ in your browser; the key is sent only to the provider you chose.
 Tips: aim to look up only a handful of words per chapter — if you're tapping every other word,
 answer "Too hard". Be honest with the feedback buttons; they are the strongest signal the app gets.
 
-## Two ways to run it
+## Two builds: staging and production
 
-- **Personal-key mode (this repo's default build, and the public site):** no account, no server.
-  You bring an OpenRouter or Anthropic key; everything stays on your device. Nothing syncs.
-- **Account mode (optional):** readers sign in, their library and progress sync between devices,
-  and chapters are written on a server in the background, so no key is needed in the app. It needs
-  the small backend in [`server/`](server/README.md) (Cloudflare Workers + Clerk) and is switched on
-  by building the app with `VITE_API_URL` and `VITE_CLERK_PUBLISHABLE_KEY`. Signed-out readers of
-  such a build still get personal-key mode.
+The same code produces two different products, and they never mix.
+
+| | Open-source build (staging) | Subscription build (production) |
+|---|---|---|
+| Who it is for | development, testing, anyone who wants to run it themselves | paying readers |
+| Sign-in | none | required (Clerk); signed-out visitors only see the sign-in screen |
+| AI | your own OpenRouter or Anthropic key, entered in the app | the service's key, on the server |
+| Storage | this browser only; nothing syncs | the server, synced between devices |
+| Chapters | written while the app is open | written in the background |
+| Where it runs | GitHub Pages, rebuilt on every push | Cloudflare, deployed by hand from [`server/`](server/README.md) |
+| How it is built | `npm run build` | `npm run build` with `VITE_API_URL` and `VITE_CLERK_PUBLISHABLE_KEY` set |
+
+New work shows up in the open-source build first; production gets it when you deploy. The promo
+page in [`site/`](site) is published with the production build and links only to it.
 
 ## Develop
 
@@ -132,10 +139,11 @@ feedback go into the prompt for the next chapter (`src/ai.ts`).
 
 ## Brand and landing page
 
-- `public/icon.svg`, `public/mark.svg`, `public/logo.svg`: the icon (a pocket, *tasku*, with the two
-  dots of "ä" peeking over its edge), the same mark with rounded corners, and the mark with the name.
-- [`site/`](site): the static promo page, deployed to Cloudflare with `cd site && npx wrangler deploy`
-  (details in [`server/README.md`](server/README.md#landing-page)).
+- `public/icon.svg`, `public/mark.svg`, `public/logo.svg`: the icon (a serif T whose crossbar is an
+  open book, wearing the two dots of Finnish ä and ö), the same mark with rounded corners, and the
+  mark with the name.
+- [`site/`](site): the static promo page. It is deployed together with the production app
+  (landing page at `/`, app at `/app/`); see [`server/README.md`](server/README.md#landing-page).
 
 ## License
 

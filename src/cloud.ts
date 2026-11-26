@@ -26,6 +26,8 @@ interface ClerkLike {
   user?: { id: string; primaryEmailAddress?: { emailAddress: string } | null } | null;
   session?: { getToken(): Promise<string | null> } | null;
   openSignIn(opts?: Record<string, unknown>): void;
+  openSignUp?(opts?: Record<string, unknown>): void;
+  openWaitlist?(opts?: Record<string, unknown>): void;
   signOut(): Promise<void>;
   addListener(cb: () => void): void;
 }
@@ -44,7 +46,15 @@ export function userLabel(): string {
 }
 
 /** Loads the sign-in library and reports whenever the signed-in reader changes. */
-export async function initAuth(onChange: () => void): Promise<void> {
+export function initAuth(onChange: () => void): Promise<void> {
+  ready = load(onChange);
+  return ready;
+}
+
+/** Resolves once the sign-in library has loaded (the buttons wait for it). */
+let ready: Promise<void> = Promise.resolve();
+
+async function load(onChange: () => void): Promise<void> {
   if (!cloudAvailable) return;
   if (DEV_USER) {
     devSignedIn = localStorage.getItem("taskututtor.dev-signed-in") === "1";
@@ -65,14 +75,26 @@ export async function initAuth(onChange: () => void): Promise<void> {
 
 let devChange: (() => void) | null = null;
 
-export function signIn(): void {
+export async function signIn(): Promise<void> {
+  await ready.catch(() => undefined);
   if (DEV_USER) {
     devSignedIn = true;
     localStorage.setItem("taskututtor.dev-signed-in", "1");
     devChange?.();
     return;
   }
-  clerk?.openSignIn({});
+  if (!clerk) throw new ApiError(0, "Sign-in could not be loaded. Check your connection and reload.");
+  clerk.openSignIn({});
+}
+
+/** Opens the waitlist form (or plain sign-up, where the waitlist is switched off in Clerk). */
+export async function joinWaitlist(): Promise<void> {
+  await ready.catch(() => undefined);
+  if (DEV_USER) return; // local development has no waitlist
+  if (!clerk) throw new ApiError(0, "The waitlist could not be loaded. Check your connection and reload.");
+  if (clerk.openWaitlist) clerk.openWaitlist({});
+  else if (clerk.openSignUp) clerk.openSignUp({});
+  else clerk.openSignIn({});
 }
 
 export async function signOut(): Promise<void> {

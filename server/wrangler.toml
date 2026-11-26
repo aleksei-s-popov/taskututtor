@@ -2,11 +2,11 @@ name = "taskututtor"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
 
-# The web app itself (built by `npm run build:web`) is served by the same Worker,
-# so one deployment gives you the site and its API on one address.
+# One deployment, one address: `npm run build:web` puts the landing page at / and the
+# subscription app at /app/, and this Worker serves both next to its API.
 [assets]
 directory = "./web"
-not_found_handling = "single-page-application"
+not_found_handling = "404-page"
 run_worker_first = ["/api/*"]
 
 [vars]

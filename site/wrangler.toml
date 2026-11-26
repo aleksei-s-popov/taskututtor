@@ -1,7 +1,0 @@
-# The landing page: plain static files on Cloudflare Workers static assets. No code runs.
-name = "taskututtor-site"
-compatibility_date = "2026-01-01"
-
-[assets]
-directory = "./public"
-not_found_handling = "404-page"

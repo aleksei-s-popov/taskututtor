@@ -1,7 +1,9 @@
-# Taskututtor server (account mode)
+# Taskututtor production (server, subscription app, landing page)
 
-The optional backend behind signed-in accounts: library sync between devices, chapters written in
-the background, and no API key for the reader. The app works without it — see the main README.
+Everything behind the paid product: the API, the subscription build of the app, and the promo
+page. Readers sign in; their library syncs between devices; chapters are written in the
+background with the service's own AI key. The open-source build in the repository root works
+without any of this and serves as staging (see the main README).
 
 It is one Cloudflare Worker:
 
@@ -32,14 +34,19 @@ see [docs/model-evaluation.md](../docs/model-evaluation.md).
 
 ## What gets deployed where
 
-| Deployment | Folder | Cloudflare name | What it is |
-|---|---|---|---|
-| App + API | `server/` | `taskututtor` | this Worker; also serves the web app's files |
-| Landing page | `site/` | `taskututtor-site` | static promo site, no code |
+One deployment of this Worker gives one address with three things on it:
 
-The public personal-key version of the app is separate again: GitHub Pages builds it from the
-repository root on every push. A typical domain layout is the landing page on `example.com` and
-the app on `app.example.com`; set each under *Workers & Pages → the Worker → Settings → Domains*.
+| Path | What | Comes from |
+|---|---|---|
+| `/` | landing page | `site/public/` |
+| `/app/` | subscription app (sign-in required, no personal keys) | repository root, built with the server settings |
+| `/api/*` | the API | `server/src/` |
+
+`npm run deploy` builds the first two into `server/web/` and uploads everything. Attach your
+domain under *Workers & Pages → taskututtor → Settings → Domains*.
+
+**Staging** is separate and needs nothing from here: GitHub Pages rebuilds the open-source build
+(own key, browser storage only, no sign-in) on every push. Try changes there, then deploy.
 
 ## Set up
 
@@ -81,6 +88,8 @@ npx wrangler login
 5. Set `ALLOWED_ORIGINS` in `wrangler.toml` to the address the deploy printed (or your own
    domain), add the same address to Clerk's allowed origins, and deploy again.
 
+6. In Clerk, turn on *Waitlist* mode so that only people you approve can get in.
+
 ## Settings (`wrangler.toml`)
 
 | Variable | Meaning |
@@ -94,25 +103,26 @@ npx wrangler login
 
 ## Landing page
 
-The promo site in [`site/`](../site) is plain HTML and CSS with no build step:
+The promo page in [`site/public/`](../site/public) is plain HTML and CSS with no build step. It
+goes out with every `npm run deploy` and is served at `/`.
 
-```bash
-cd site
-npx wrangler deploy
-```
-
-Wrangler prints the address (`taskututtor-site.<your-subdomain>.workers.dev`). Before or after
-you attach your own domain:
-
-- **Links:** the page links to the app and to the source repository. Both addresses are listed in
-  a comment at the top of `site/public/index.html`; replace them when the app moves to your domain.
-- **Share image:** set `og:image` in `index.html` to a full address (`https://your-domain/img/og.png`);
-  social networks do not follow relative ones.
-- **Pricing:** the page says account pricing "will be announced". Edit the *Two ways to use it*
-  section when you have a price.
+- **Where its buttons lead:** only to `/app/` (sign in) and `/app/#join` (the waitlist). It does
+  not link to the open-source build or the repository.
+- **Waitlist:** switch on *Waitlist* mode in Clerk (*Configure → Restrictions*). "Join the
+  waitlist" then opens Clerk's waitlist form, and you approve people in the Clerk dashboard. With
+  the waitlist off, the same button opens normal sign-up.
+- **No price yet:** the *Membership* section describes what is included and offers the waitlist.
+  Add a price there once billing exists.
+- **Share image:** set `og:image` in `index.html` to a full address
+  (`https://your-domain/img/og.png`); social networks do not follow relative ones.
+- **Preview locally:** open `site/public/index.html` in a browser, or run `npm run build:web`
+  and `npm run dev` here to see it at `/` with the app at `/app/`.
 
 The screenshots in `site/public/img/` are real app screens showing a chapter and an illustration
 produced during the model tests. Retake them after visible changes to the app.
+
+There is no payment system yet: anyone you let in can read up to `DAILY_CHAPTER_LIMIT` new
+chapters a day at your cost. The waitlist is what controls that for now.
 
 ## Backups
 
@@ -150,11 +160,13 @@ npm run db:local
 npm run dev                                   # API on http://localhost:8787
 ```
 
-and in the repository root:
+and in the repository root, the subscription build of the app:
 
 ```bash
 VITE_API_URL=http://localhost:8787 VITE_DEV_USER=me npm run dev
 ```
+
+(Plain `npm run dev` there, without those variables, is the open-source build.)
 
 `DEV_AUTH=1` together with `VITE_DEV_USER` signs you in as a fixed development user without
 Clerk. Never set `DEV_AUTH` on a deployed Worker.
