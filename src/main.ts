@@ -1,5 +1,5 @@
 import "./style.css";
-import { cefr, finishChapter, knownCount, learningWords, MAX_LEVEL, MIN_LEVEL, type ChapterResult } from "./adapt";
+import { cefr, finishChapter, ykiProgress, knownCount, learningWords, MAX_LEVEL, MIN_LEVEL, type ChapterResult } from "./adapt";
 import { aiDictionaryCard, friendlyError, generateChapter, generateIllustration, lookupWord, type NewSeriesRequest } from "./ai";
 import { cacheCard, cachedCard, wiktionaryCard, type DictCard } from "./dict";
 import { compress, deleteImage, getImage, putImage } from "./images";
@@ -66,6 +66,7 @@ function toast(msg: string): void {
 
 function go(v: View): void {
   closeSheet();
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
   view = v;
   render();
   window.scrollTo(0, 0);
@@ -191,6 +192,10 @@ function onboardView(): string {
       <p class="hint">A rough guess is fine. The app adjusts after every chapter.</p>
       <div class="choices">${levelOptions(1)}</div>
       ${langField()}
+<label class="check">
+        <input type="checkbox" name="yki" ${state.settings.yki ? "checked" : ""}>
+        <span><b>I'm preparing for the YKI test</b><small>Stories work in everyday YKI themes and text types, and each chapter ends with test-style comprehension questions.</small></span>
+      </label>
       <label class="field">What do you like to read? <span class="opt">optional</span>
         <input name="interests" placeholder="e.g. detective stories, space, cooking, dark humour">
       </label>
@@ -237,6 +242,14 @@ function libraryView(): string {
       <div><b>${knownCount(state)}</b><small>words known</small></div>
       <button data-act="nav" data-to="words"><b>${learning}</b><small>learning ›</small></button>
     </section>
+    ${
+      state.settings.yki
+        ? `<section class="goal">
+        <div class="goal-top"><b>Road to YKI</b><small>intermediate test · B1</small><span>${Math.round(ykiProgress(state.settings.level) * 100)}%</span></div>
+        <div class="bar"><i style="width:${Math.max(2, Math.round(ykiProgress(state.settings.level) * 100))}%"></i></div>
+      </section>`
+        : ""
+    }
     ${activeKey(state.settings) ? "" : `<p class="notice">Add your API key in <a href="#" data-act="nav" data-to="settings">Settings</a> to generate new stories. The sample below works without it.</p>`}
     <h2>Your series</h2>
     ${cards || `<p class="hint">Nothing here yet — start your first series.</p>`}
@@ -321,6 +334,10 @@ function settingsView(): string {
     <form data-form="settings">
       ${keyField(true)}
       ${langField()}
+<label class="check">
+        <input type="checkbox" name="yki" ${state.settings.yki ? "checked" : ""}>
+        <span><b>I'm preparing for the YKI test</b><small>Stories work in everyday YKI themes and text types, and each chapter ends with test-style comprehension questions.</small></span>
+      </label>
       <label class="field">Interests
         <input name="interests" value="${esc(s.interests)}" placeholder="e.g. detective stories, space, cooking">
       </label>
@@ -373,9 +390,34 @@ function sentenceHtml(ch: Chapter, pi: number, si: number): string {
   return `<span class="s" data-sid="${pi}.${si}">${words}</span> `;
 }
 
+function quizHtml(ch: Chapter): string {
+  const qs = ch.questions ?? [];
+  if (!qs.length) return "";
+  return `
+    <h3>Did you understand?</h3>
+    <p class="hint">Three questions like the ones in the YKI reading test.</p>
+    ${qs
+      .map((q, qi) => {
+        const picked = ch.answers?.[qi];
+        const done = picked !== undefined && picked !== null;
+        return `<div class="q">
+          <p class="q-text" lang="fi">${qi + 1}. ${esc(q.q)}</p>
+          ${q.options
+            .map((o, oi) => {
+              const cls = !done ? "" : oi === q.answer ? "correct" : oi === picked ? "wrong" : "";
+              return `<button class="opt-btn ${cls}" lang="fi" data-act="answer" data-q="${qi}" data-o="${oi}" ${done || ch.finished ? "disabled" : ""}>${esc(o)}</button>`;
+            })
+            .join("")}
+          ${q.tr ? `<details><summary>Translation</summary><p class="note">${esc(q.tr)}</p></details>` : ""}
+        </div>`;
+      })
+      .join("")}`;
+}
+
 function endHtml(series: Series, ch: Chapter, idx: number): string {
   if (!ch.finished) {
     return `
+      ${quizHtml(ch)}
       <h3>How was this chapter?</h3>
       <p class="hint">Your answer and the words you looked up shape the next one.</p>
       <div class="feedback">
@@ -392,6 +434,7 @@ function endHtml(series: Series, ch: Chapter, idx: number): string {
     ${
       r
         ? `<p class="result">You looked up <b>${r.lookedUp}</b> of ${r.uniqueWords} different words (${Math.round(r.lookupRate * 100)}%).
+           ${r.quiz.total ? `Questions: <b>${r.quiz.right}/${r.quiz.total}</b> right.` : ""}
            ${r.newlyKnown ? `<b>${r.newlyKnown}</b> more word${r.newlyKnown === 1 ? "" : "s"} now count as known.` : ""}
            Level: <b>${cefr(state.settings.level)} · ${state.settings.level.toFixed(2)}</b>${d ? ` (${d > 0 ? "+" : ""}${d.toFixed(2)})` : ""}. ${move}</p>`
         : `<p class="hint">Chapter finished ✓</p>`
@@ -425,7 +468,8 @@ function readerView(): string {
     <p class="kicker">Chapter ${idx + 1}${series.plan && idx >= series.plan.start && idx < arcLength(series) ? ` of ${arcLength(series)}` : ""} · ${cefr(ch.level)}</p>
     <h2 class="chapter-title">${esc(ch.title)}</h2>
     <figure class="art" id="art">${artHtml(ch)}</figure>
-    <p class="hint">Tap a word for its meaning. Try to guess first.</p>
+    <p class="hint">Tap a word for its meaning. Try to guess first.
+      <button class="link" data-act="listen-all">🔊 Listen to the chapter</button></p>
     <article class="text">
       ${ch.paragraphs.map((p, pi) => `<p>${p.map((_, si) => sentenceHtml(ch, pi, si)).join("")}</p>`).join("")}
     </article>
@@ -763,6 +807,39 @@ document.addEventListener("click", (ev) => {
     case "close-sheet":
       closeSheet();
       break;
+    case "answer": {
+      const series = currentSeries();
+      const ch = currentChapter();
+      if (!series || !ch || ch.finished || view.name !== "reader") break;
+      (ch.answers ??= [])[Number(d.q)] = Number(d.o);
+      persist();
+      document.getElementById("end")!.innerHTML = endHtml(series, ch, view.idx);
+      break;
+    }
+    case "listen-all": {
+      const ch = currentChapter();
+      if (!ch) break;
+      if (!("speechSynthesis" in window)) {
+        toast("This browser can't read text aloud.");
+        break;
+      }
+      if (speechSynthesis.speaking) {
+        speechSynthesis.cancel();
+        el.textContent = "🔊 Listen to the chapter";
+        break;
+      }
+      // One utterance per sentence: long texts get cut off on Android.
+      const sentences = ch.paragraphs.flat();
+      sentences.forEach((sen, i) => {
+        const u = new SpeechSynthesisUtterance(sen.fi);
+        u.lang = "fi-FI";
+        u.rate = 0.85;
+        if (i === sentences.length - 1) u.onend = () => (el.textContent = "🔊 Listen to the chapter");
+        speechSynthesis.speak(u);
+      });
+      el.textContent = "⏹ Stop listening";
+      break;
+    }
     case "speak":
       speak(d.text ?? "");
       break;
@@ -884,6 +961,7 @@ document.addEventListener("submit", (ev) => {
     }
     s.lang = text("lang") || "English";
     s.interests = text("interests");
+    s.yki = f.has("yki");
     // The slider snaps to 0.25 steps, so only take its value when the reader actually moved it.
     const slider = form.querySelector<HTMLInputElement>('input[type="range"][name="level"]');
     if (!slider || slider.dataset.dirty) s.level = Number(f.get("level")) || s.level;

@@ -12,6 +12,13 @@ export interface GlossEntry {
   name?: boolean;
 }
 
+export interface Question {
+  q: string;
+  tr: string;
+  options: string[];
+  answer: number;
+}
+
 export type Feedback = "easy" | "right" | "hard";
 
 export interface Chapter {
@@ -30,6 +37,10 @@ export interface Chapter {
   finished: boolean;
   feedback?: Feedback;
   levelDelta?: number;
+  /** comprehension questions in the style of the YKI reading test */
+  questions?: Question[];
+  /** index of the option the reader picked for each question */
+  answers?: number[];
   /** one-line summary of what happened (kept as a log so later chapters don't repeat it) */
   recap?: string;
   /** the moment of this chapter to illustrate (written by the story model) */
@@ -97,6 +108,8 @@ export interface Settings {
   /** 0.5 (absolute beginner) … 6 (C2); 1 = A1, 2 = A2, 3 = B1 … */
   level: number;
   interests: string;
+  /** preparing for the YKI intermediate test: everyday themes, real-life text types, comprehension questions */
+  yki: boolean;
   fontSize: number;
   /** illustrate each new chapter (needs an OpenRouter key) */
   illustrations: boolean;
@@ -150,6 +163,7 @@ function defaults(): State {
       lang: "English",
       level: 1,
       interests: "",
+      yki: true,
       fontSize: 20,
       illustrations: false,
       imageModel: IMAGE_MODELS[0].id,

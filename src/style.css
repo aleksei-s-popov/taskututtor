@@ -768,3 +768,86 @@ input[type="range"] {
   cursor: pointer;
   text-align: left;
 }
+
+/* YKI goal + comprehension questions */
+
+.goal {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.goal-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.goal-top span {
+  margin-left: auto;
+  font-weight: 700;
+}
+
+.bar {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.bar i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--accent);
+}
+
+.q {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.q-text {
+  font-family: Georgia, serif;
+  font-size: calc(var(--read-size) * 0.9);
+}
+
+.opt-btn {
+  appearance: none;
+  font: inherit;
+  font-family: Georgia, serif;
+  color: var(--ink);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.opt-btn:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.opt-btn.correct {
+  border-color: #2e8b57;
+  background: color-mix(in srgb, #2e8b57 18%, var(--surface));
+}
+
+.opt-btn.wrong {
+  border-color: #c0392b;
+  background: color-mix(in srgb, #c0392b 16%, var(--surface));
+}
+
+.q details {
+  font-size: 13px;
+  color: var(--muted);
+}

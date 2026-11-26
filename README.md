@@ -71,6 +71,23 @@ npm run build    # type-check and build to dist/
 `.github/workflows/deploy.yml` builds and publishes to GitHub Pages on every push.
 Enable it once under **Settings → Pages → Source: GitHub Actions**.
 
+## Preparing for the YKI test
+
+With **I'm preparing for the YKI test** ticked (the default; change it in Settings), the app aims
+at the YKI intermediate test (B1):
+
+- every chapter works one everyday YKI topic into the plot — housing, health, work, authorities,
+  shopping, travel and so on, in rotation — with the real vocabulary of that situation;
+- chapters include short real-life texts of the kind used in YKI reading tasks (messages, emails,
+  notices, ads, official letters);
+- each chapter ends with three test-style multiple-choice comprehension questions in Finnish, and
+  your score feeds into the difficulty adjustment;
+- the home screen shows a **Road to YKI** bar: progress from beginner to B1;
+- **Listen to the chapter** reads the whole text aloud for listening practice.
+
+The app trains reading, vocabulary and listening. YKI also tests writing and speaking, which it
+does not cover.
+
 ## How stories stay on track
 
 Each series is written against a hidden plan made with chapter 1: what is really going on, how it

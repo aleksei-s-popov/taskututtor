@@ -65,6 +65,24 @@ function levelBrief(level: number): { words: number; brief: string } {
   };
 }
 
+/** Topic areas of the YKI intermediate test; chapters rotate through them. */
+const YKI_THEMES = [
+  "home and housing (renting, neighbours, repairs, the housing company)",
+  "shopping and services (shops, prices, returning goods, post office, bank)",
+  "health and wellbeing (doctor, pharmacy, symptoms, making an appointment)",
+  "work and looking for work (workplace, colleagues, applications, the TE office)",
+  "travel and transport (tickets, timetables, directions, delays)",
+  "food and eating (cooking, restaurants, ordering, invitations)",
+  "dealing with authorities (Kela, the police, Migri, taxes, forms and appointments)",
+  "study and education (courses, school, exams, enrolling)",
+  "free time and hobbies (sports, culture, clubs, events)",
+  "family, friends and relationships (celebrations, agreeing plans, apologising)",
+  "weather, nature and the environment (seasons, recycling, the outdoors)",
+  "media and technology (news, phones, the internet, problems with devices)",
+  "money and everyday economy (bills, wages, saving, contracts)",
+  "society and current affairs (rules, opinions, complaints, local decisions)",
+];
+
 const SYSTEM = `You write serialized fiction for an adult learning Finnish through comprehensible input (extensive reading). You are both a gripping storyteller and an expert in Finnish as a second language.
 
 Craft:
@@ -95,7 +113,7 @@ Output:
 const CHAPTER_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["series_title", "series_premise", "chapter_title", "chapter_title_tr", "paragraphs", "glossary", "story_so_far", "art_bible", "illustration_scene", "chapter_recap", "plan"],
+  required: ["series_title", "series_premise", "chapter_title", "chapter_title_tr", "paragraphs", "glossary", "story_so_far", "art_bible", "illustration_scene", "chapter_recap", "plan", "questions"],
   properties: {
     series_title: { type: "string", description: "Series title in Finnish" },
     series_premise: { type: "string", description: "One-sentence spoiler-free teaser in the translation language" },
@@ -132,6 +150,20 @@ const CHAPTER_SCHEMA = {
     art_bible: { type: "string" },
     illustration_scene: { type: "string" },
     chapter_recap: { type: "string" },
+    questions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["q", "tr", "options", "answer"],
+        properties: {
+          q: { type: "string" },
+          tr: { type: "string" },
+          options: { type: "array", items: { type: "string" } },
+          answer: { type: "integer" },
+        },
+      },
+    },
     plan: {
       type: "object",
       additionalProperties: false,
@@ -156,6 +188,7 @@ interface ChapterPayload {
   art_bible: string;
   illustration_scene: string;
   chapter_recap: string;
+  questions: { q: string; tr: string; options: string[]; answer: number }[];
   plan: { truth: string; ending: string; beats: string[] };
 }
 
@@ -179,6 +212,18 @@ function buildPrompt(state: State, series: Series | null, req: NewSeriesRequest 
     `Translation language: ${lang}.`,
   ];
   if (interests.trim()) lines.push(`Reader's interests: ${interests.trim()}`);
+  if (state.settings.yki) {
+    const written = state.series.reduce((n, s) => n + s.chapters.length, 0);
+    lines.push(
+      `The reader's end goal is to pass the Finnish YKI test at intermediate level (keskitaso, B1). The story comes first, but it must also build what that test demands:`,
+      `- This chapter's YKI theme: ${YKI_THEMES[written % YKI_THEMES.length]}. Make it part of what the characters actually do in this chapter, with the real everyday vocabulary of that situation. In a fantastical or futuristic world use its equivalent (a clinic on a space station is still a clinic). Never lecture.`,
+      "- Where it fits the plot, include one short everyday text of the kind used in YKI reading tasks — a text message, email, notice, advertisement, timetable, form, news item or official letter — written the way such texts really look in Finland, at the reader's level.",
+      "- Narration in standard written Finnish (yleiskieli).",
+      "- questions: exactly 3 multiple-choice comprehension questions about this chapter, in the style of the YKI reading test, in Finnish at the reader's level (very short and simple for beginners). They must test understanding of what happened or why — not word-spotting — and cover different parts of the chapter. Each has 3 short options in Finnish, exactly one correct; \"answer\" is its index (0–2), varied across questions; \"tr\" translates the question and its options into the translation language.",
+    );
+  } else {
+    lines.push("questions: return an empty list.");
+  }
   if (known) lines.push(`The reader has shown they know about ${known} word families so far.`);
   if (learning.length)
     lines.push(
@@ -307,6 +352,7 @@ function toChapter(p: ChapterPayload, level: number): Chapter {
     finished: false,
     scene: p.illustration_scene || undefined,
     recap: p.chapter_recap || undefined,
+    questions: (p.questions ?? []).filter((q) => q.q && q.options?.length >= 2 && q.answer >= 0 && q.answer < q.options.length),
   };
 }
 
