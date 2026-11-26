@@ -999,8 +999,8 @@ body:has(#player.open) .page {
 
 .cover {
   flex: none;
-  width: 60px;
-  height: 60px;
+  width: 112px;
+  height: 112px;
   border-radius: 10px;
   background: var(--tint);
   overflow: hidden;
@@ -1016,4 +1016,16 @@ body:has(#player.open) .page {
 
 .card-top .icon {
   margin: -10px -10px 0 0;
+}
+
+/* next to a cover the teaser is kept to a few lines so the card stays compact */
+.cover + .card-head p {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-head h3 {
+  font-size: 20px;
 }
