@@ -614,10 +614,10 @@ const painting = new Set<string>();
 function artHtml(ch: Chapter): string {
   const url = artCache.get(ch.id);
   if (painting.has(ch.id)) {
-    return `${url ? `<img src="${url}" alt="" class="dim">` : ""}<div class="art-wait"><div class="spinner small"></div><span>Painting the illustration…</span></div>`;
+    return `${url ? `<div class="art-frame dim"><img src="${url}" alt=""></div>` : ""}<div class="art-wait"><div class="spinner small"></div><span>Painting the illustration…</span></div>`;
   }
   if (url) {
-    return `<img src="${url}" alt="Illustration for this chapter">
+    return `<div class="art-frame"><img src="${url}" alt="Illustration for this chapter"></div>
       <button class="btn small ghost" data-act="illustrate">${icon("repeat", 16)} Regenerate illustration</button>`;
   }
   if (ch.hasImage) return `<div class="art-wait"></div>`; // still loading from storage

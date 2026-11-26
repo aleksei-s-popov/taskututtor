@@ -581,16 +581,26 @@ input[type="range"] {
   display: none;
 }
 
-.art img {
+/* Image models often draw their own frame or white margin around a picture.
+   The frame clips the outer few percent so pictures always run edge to edge. */
+.art-frame {
   width: 100%;
   aspect-ratio: 3 / 2;
-  object-fit: cover;
   border-radius: var(--r);
-  border: 1px solid var(--line);
-  display: block;
+  overflow: hidden;
+  background: var(--tint);
 }
 
-.art img.dim {
+.art-frame img,
+.cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transform: scale(1.08);
+}
+
+.art-frame.dim {
   opacity: 0.35;
 }
 
@@ -608,7 +618,7 @@ input[type="range"] {
   font-size: 14px;
 }
 
-.art img.dim + .art-wait {
+.art-frame.dim + .art-wait {
   position: absolute;
   inset: 0;
   border: 0;

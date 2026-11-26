@@ -107,7 +107,7 @@ Output:
 - story_so_far: the series canon in English (max 250 words), updated to include this chapter and written for yourself: who the characters are and what each wants, facts and rules established so far, where everyone is right now, which questions have been ANSWERED (with the answer) and which are still open. Drop atmosphere; keep facts.
 - chapter_recap: one English sentence (max 30 words) stating what concretely happened and changed in this chapter.
 - plan: the secret plot plan. When you are asked to create a plan, fill it in: "truth" = what is really going on and why (the answer to the central mystery; 2–4 sentences), "ending" = how the arc ends, "beats" = one entry per remaining chapter of the arc, in order, starting with the chapter you are writing now — each a concrete event that changes the situation, with its location; the last beat resolves the central conflict. When you are given an existing plan to follow, return empty strings and an empty beats list.
-- art_bible: in English, the fixed visual identity of the series for an illustrator (max 150 words): one consistent art style (medium, palette, mood) that suits the genre, then the exact unchanging look of each recurring character (age, build, hair, face, signature clothing) and key locations. For a continuing series you are given the existing art bible: return it word for word, only appending newly introduced recurring characters or locations.
+- art_bible: in English, the fixed visual identity of the series for an illustrator (max 150 words): one consistent art style (medium, palette, mood) that suits the genre, (never one that implies framed panels, borders or page layouts), then the exact unchanging look of each recurring character (age, build, hair, face, signature clothing) and key locations. For a continuing series you are given the existing art bible: return it word for word, only appending newly introduced recurring characters or locations.
 - illustration_scene: in English, one visually striking moment from this chapter for a single illustration (max 60 words): who is in frame, what they are doing, setting, light and mood. Do not give away the chapter's final twist.`;
 
 const CHAPTER_SCHEMA = {
@@ -619,7 +619,8 @@ export async function generateIllustration(state: State, series: Series, ch: Cha
     reference
       ? "The attached image is an earlier illustration from the same series. Match its art style, palette and rendering exactly, and draw any recurring character with exactly the same face, hair, build and clothing. Compose a new scene — do not copy its composition."
       : "",
-    "Wide landscape format (3:2). Absolutely no text, letters, captions, speech bubbles, signatures, watermarks or borders in the image.",
+    "Wide landscape format (3:2). The picture is full-bleed: the scene fills the whole canvas right up to every edge. No frame, no border, no panel outline, no white or black margin, no rounded corners, no vignette edge — even if the art style is a comic or graphic novel, do not draw a panel.",
+    "No captions, speech bubbles, signatures or watermarks. Avoid written words in the scene.",
   ]
     .filter(Boolean)
     .join("\n\n");
